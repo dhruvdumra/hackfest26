@@ -305,7 +305,10 @@ export default function App() {
     route: (
       <div className="space-y-12">
         <RadarStrip baseUrl={backendBaseUrl} />
-        <div className="grid gap-16 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:gap-12">
+        {/* `grid-cols-1` is a minmax(0, 1fr) track: without it the single phone
+            column grew to the ranking table's 34rem minimum and the whole page
+            scrolled sideways, instead of the table scrolling in its region. */}
+        <div className="grid grid-cols-1 gap-16 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:gap-12">
           {/* Keyed on the start skill so the map re-seeds once the passport lands. */}
           <RouteMap
             key={routeStart}
@@ -398,10 +401,12 @@ export default function App() {
       </header>
 
       <main>
-        {/* Hero, left-aligned. Display steps 32 → 44 → 63px on the same
-            leading and tracking; 32px is the base so the first line holds as
-            one unit on a 390px phone. The headline is the deck's own tagline,
-            so the demo opens on the line the pitch closed on. */}
+        {/* Hero, left-aligned. Display steps fluid → 44 → 63px on the same
+            leading and tracking. The headline is the deck's own tagline, so
+            the demo opens on the line the pitch closed on. Its first line
+            measures about 10.7× the font size, so on a phone the size follows
+            the column, (100vw − 3rem) / 10.8, capped at 32px and floored at
+            24px: "When AI moves the job," holds as one line from 320px up. */}
         <div className={`${pageColumnClass} ${HERO_CLASS}`}>
           {/* The headline spans the full column, above the two-column row.
               "When AI moves the job," is ~760px at 63px, wider than the copy
@@ -410,7 +415,7 @@ export default function App() {
           <Reveal>
             <h1
               id="demo-title"
-              className={`${typeDisplayClass} ${chalkClass} text-[2rem] sm:text-heading-lg lg:text-display`}
+              className={`${typeDisplayClass} ${chalkClass} text-[clamp(1.5rem,calc((100vw_-_3rem)/10.8),2rem)] sm:text-heading-lg lg:text-display`}
             >
               When AI moves the job,
               <span className={`block italic ${smokeClass}`}>we move the path.</span>
