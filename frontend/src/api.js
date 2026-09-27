@@ -301,3 +301,23 @@ export function rewriteEmployerFilter(jobPostId, options) {
   })
 }
 
+
+/** The hiring manager's sign-off on a rewritten post — the second Two-Key. */
+export function decideEmployerRewrite(jobPostId, payload, options) {
+  const { baseUrl, signal } = options ?? {}
+
+  return requestJson(
+    `/employer/rewrite-filter/${encodeURIComponent(String(jobPostId ?? ''))}/decision`,
+    { method: 'POST', body: payload, baseUrl, signal },
+  )
+}
+
+/** The latest sign-off on a post; rejects with a 404 ApiError when there is none. */
+export function getEmployerDecision(jobPostId, options) {
+  const { baseUrl, signal } = options ?? {}
+
+  return requestJson(
+    `/employer/rewrite-filter/${encodeURIComponent(String(jobPostId ?? ''))}/decision`,
+    { baseUrl, signal },
+  )
+}

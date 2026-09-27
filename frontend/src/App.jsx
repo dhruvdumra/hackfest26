@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import AgentConsole from './components/AgentConsole.jsx'
 import GhostTwinPanel from './components/GhostTwinPanel.jsx'
+import HiringDecision from './components/HiringDecision.jsx'
 import Logo from './components/Logo.jsx'
 import Manifesto from './components/Manifesto.jsx'
 import MatchPanel from './components/MatchPanel.jsx'
@@ -280,7 +281,21 @@ export default function App() {
       </div>
     ),
     audit: <GhostTwinPanel baseUrl={backendBaseUrl} />,
-    keys: <EmployerRewritePanel baseUrl={backendBaseUrl} />,
+    keys: (
+      <EmployerRewritePanel
+        baseUrl={backendBaseUrl}
+        renderDecision={(rewrite) =>
+          // A post the filter hid nobody from has nothing to sign off.
+          typeof rewrite.hidden_talent_count === 'number' && rewrite.hidden_talent_count > 0 ? (
+            <HiringDecision
+              baseUrl={backendBaseUrl}
+              jobPostId={String(rewrite.job_post_id)}
+              hiddenTalentCount={rewrite.hidden_talent_count}
+            />
+          ) : null
+        }
+      />
+    ),
   }
 
   return (

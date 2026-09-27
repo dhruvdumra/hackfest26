@@ -257,6 +257,30 @@ class EmployerFilterRewriteResponse(APIModel):
     disclaimer: str
 
 
+EmployerDecision = Literal["approve", "reject"]
+
+
+class EmployerDecisionRequest(APIModel):
+    """The hiring manager's key: a human sign-off on one rewritten job post."""
+
+    decision: EmployerDecision
+    reviewer: str = Field(default="Hiring manager", min_length=1, max_length=80)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class EmployerDecisionRecord(APIModel):
+    """A stored sign-off. The post itself is a fixture, so the record says so."""
+
+    decision_id: str
+    job_post_id: str
+    decision: EmployerDecision
+    reviewer: str
+    note: str | None = None
+    decided_at: datetime
+    hidden_talent_count: int = Field(ge=0)
+    source: Literal["simulated"] = "simulated"
+
+
 class SessionState(APIModel):
     session_id: str
     input_type: InputType

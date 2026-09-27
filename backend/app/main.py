@@ -10,6 +10,7 @@ from app.api import audit, health, learning_pathway, market, matching, sessions,
 from app.api.sessions import ORCHESTRATION_TASKS_STATE_KEY
 from app.config import Settings, get_settings
 from app.services import hana_client
+from app.storage.decision_store import DecisionStore, SqliteDecisionStore
 from app.storage.session_store import SessionStore, SqliteSessionStore
 
 ORCHESTRATION_DRAIN_SECONDS = 10.0
@@ -18,13 +19,16 @@ ORCHESTRATION_DRAIN_SECONDS = 10.0
 def create_app(
     settings: Settings | None = None,
     session_store: SessionStore | None = None,
+    decision_store: DecisionStore | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     resolved_store = session_store or SqliteSessionStore(resolved_settings.database_path)
+    resolved_decisions = decision_store or SqliteDecisionStore(resolved_settings.database_path)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         await resolved_store.initialize()
+        await resolved_decisions.initialize()
         keep_alive_task = _start_hana_keep_alive(resolved_settings)
         try:
             yield
@@ -32,6 +36,7 @@ def create_app(
             await _stop_hana_keep_alive(keep_alive_task)
             await _drain_orchestration_tasks(application)
             hana_client.close_connection()
+            await resolved_decisions.close()
             await resolved_store.close()
 
     application = FastAPI(
@@ -41,6 +46,7 @@ def create_app(
     )
     application.state.settings = resolved_settings
     application.state.session_store = resolved_store
+    application.state.decision_store = resolved_decisions
     application.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origins,

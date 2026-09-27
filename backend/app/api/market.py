@@ -1,11 +1,16 @@
+from datetime import UTC, datetime
 from typing import Annotated, Any, cast
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Path, Query, status
 
+from app.api.dependencies import DecisionStoreDependency
 from app.mocks import employer_fixtures, market_fixtures
 from app.models import (
     ROLE_QUERY_MAX_LENGTH,
     DisplacementRadarResponse,
+    EmployerDecisionRecord,
+    EmployerDecisionRequest,
     EmployerFilterRewriteRequest,
     EmployerFilterRewriteResponse,
 )
@@ -14,6 +19,7 @@ router = APIRouter(tags=["market", "employer"])
 
 RoleQuery = Annotated[str, Query(min_length=1, max_length=ROLE_QUERY_MAX_LENGTH)]
 CityQuery = Annotated[str, Query(min_length=1, max_length=ROLE_QUERY_MAX_LENGTH)]
+JobPostPath = Annotated[str, Path(min_length=1, max_length=120)]
 
 
 @router.get("/market/displacement-radar", response_model=DisplacementRadarResponse)
@@ -38,13 +44,7 @@ def displacement_radar(
 def rewrite_filter(
     request: EmployerFilterRewriteRequest,
 ) -> EmployerFilterRewriteResponse:
-    post = employer_fixtures.JOB_POSTS_BY_ID.get(request.job_post_id)
-    if post is None:
-        known = ", ".join(sorted(employer_fixtures.JOB_POSTS_BY_ID))
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"unknown job_post_id; expected one of: {known}",
-        )
+    post = _job_post(request.job_post_id)
     return EmployerFilterRewriteResponse(
         job_post_id=post["post_id"],
         role=post["role"],
@@ -57,6 +57,64 @@ def rewrite_filter(
         rewrite_reason=post["rewrite_reason"],
         disclaimer=employer_fixtures.DISCLAIMER,
     )
+
+
+@router.post(
+    "/employer/rewrite-filter/{job_post_id}/decision",
+    response_model=EmployerDecisionRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def decide_rewrite(
+    job_post_id: JobPostPath,
+    request: EmployerDecisionRequest,
+    decisions: DecisionStoreDependency,
+) -> EmployerDecisionRecord:
+    """Record the hiring manager's sign-off on a rewritten post: the second key.
+
+    The agent drafts the rewrite; nothing is published on its say-so. Every
+    decision is a new row, so approving and then rejecting leaves both on record.
+    """
+    post = _job_post(job_post_id)
+    record = EmployerDecisionRecord(
+        decision_id=f"decision-{uuid4().hex[:12]}",
+        job_post_id=post["post_id"],
+        decision=request.decision,
+        reviewer=request.reviewer.strip() or "Hiring manager",
+        note=request.note.strip() if request.note and request.note.strip() else None,
+        decided_at=datetime.now(UTC),
+        hidden_talent_count=post["hidden_talent_count"],
+    )
+    await decisions.record(record)
+    return record
+
+
+@router.get(
+    "/employer/rewrite-filter/{job_post_id}/decision",
+    response_model=EmployerDecisionRecord,
+)
+async def latest_rewrite_decision(
+    job_post_id: JobPostPath,
+    decisions: DecisionStoreDependency,
+) -> EmployerDecisionRecord:
+    post = _job_post(job_post_id)
+    record = await decisions.latest(post["post_id"])
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No decision has been recorded for this job post yet",
+        )
+    return record
+
+
+def _job_post(job_post_id: str) -> dict[str, Any]:
+    post = employer_fixtures.JOB_POSTS_BY_ID.get(job_post_id)
+    if post is None:
+        known = ", ".join(sorted(employer_fixtures.JOB_POSTS_BY_ID))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"unknown job_post_id; expected one of: {known}",
+        )
+    return cast(dict[str, Any], post)
 
 
 def _radar_entry(role: str, city: str) -> dict[str, Any]:
