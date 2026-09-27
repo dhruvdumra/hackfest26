@@ -97,7 +97,11 @@
      the FLAGGED verdict, which is why the two states were indistinguishable. */
   --color-pulse-green: #14b8a0;      /* live status and a PASS */
   --color-flagged: #ff6369;          /* 6.8:1 — a biased screening model */
-  --color-danger: #f2545b;           /*  5.8:1 — errors */
+  /* One red. `danger` (a blocked role, a withdrawn consent, a rejection) and
+     `flagged` (a biased verdict) are different states in code, but on screen
+     they are the deck's single "problem" red: two reds 0.3:1 apart read as a
+     mistake, not a distinction. The word in each badge names the state. */
+  --color-danger: #ff6369;           /*  6.8:1 — the same red as flagged */
 
   /* Typography — two faces, both specified by the reference and both now
      actually loaded (see public/fonts/fonts.css). The reference's Aeonik is
