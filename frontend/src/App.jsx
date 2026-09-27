@@ -17,6 +17,7 @@ import WorkSamplePanel from './components/WorkSamplePanel.jsx'
 import { Button } from './components/Button.jsx'
 import { useDemoMode } from './context/DemoModeContext.jsx'
 import { DEMO_MOMENTS } from './data/demoMoments.js'
+import { SKILL_OPTIONS } from './data/skillGraph.js'
 import { startSession } from './api.js'
 import { useSessionStream } from './hooks/useSessionStream.js'
 import { useAgentStream } from './hooks/useAgentStream.js'
@@ -43,6 +44,20 @@ import {
 const MOMENT_IDS = DEMO_MOMENTS.map((moment) => moment.id)
 const TWO_KEY_STEP = MOMENT_IDS.indexOf('keys')
 const EMPTY_SKILLS = []
+const DEFAULT_ROUTE_START = 'Manual testing'
+
+/* The route starts where the orchestrator's Learning Pathway agent starts it:
+ * the passport's first claim (strongest first) that is a node in the skills
+ * graph. Starting the map from "Manual testing" while the agent log reported
+ * a route from her strongest proven skill put two different hour totals on
+ * screen for the same run. Before a passport exists, her current role is the
+ * honest start. */
+function routeStartSkill(passport) {
+  const claims = Array.isArray(passport?.skills) ? passport.skills : []
+  const routable = claims.find((claim) => SKILL_OPTIONS.includes(claim?.name))
+
+  return routable?.name ?? DEFAULT_ROUTE_START
+}
 
 // In-page anchors. The presenter bar carries the five demo steps, so the nav
 // only needs the three places a judge asks to jump to: the start of the demo,
@@ -209,6 +224,7 @@ export default function App() {
   const usingLiveTransport = !demoMode && Boolean(sessionId)
   const events = usingLiveTransport ? stream.events : fallback.events
   const skills = session?.passport?.skills ?? EMPTY_SKILLS
+  const routeStart = routeStartSkill(session?.passport)
 
   const handleSessionStart = useCallback(
     async (payload) => {
@@ -288,7 +304,12 @@ export default function App() {
     route: (
       <div className="space-y-24">
         <DisplacementRadarPanel baseUrl={backendBaseUrl} />
-        <RouteMap baseUrl={backendBaseUrl} />
+        {/* Keyed on the start skill so the map re-seeds once the passport lands. */}
+        <RouteMap
+          key={routeStart}
+          baseUrl={backendBaseUrl}
+          initialFromSkill={routeStart}
+        />
         <MatchPanel
           baseUrl={backendBaseUrl}
           sessionId={sessionId}

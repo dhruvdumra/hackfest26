@@ -19,6 +19,7 @@ import NumberInput from '../components/NumberInput.jsx'
 import Select from '../components/Select.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import TextInput from '../components/TextInput.jsx'
+import { SKILL_OPTIONS } from '../data/skillGraph.js'
 
 const DEFAULT_FROM_SKILL = 'Manual testing'
 const DEFAULT_TARGET_ROLE = 'qa-analyst'
@@ -28,20 +29,6 @@ const DEFAULT_HOURS_PER_WEEK = 10
 const MIN_HOURS_PER_WEEK = 1
 const MAX_HOURS_PER_WEEK = 40
 
-const SKILL_OPTIONS = [
-  'Manual testing',
-  'Regression testing',
-  'API testing',
-  'Test automation',
-  'SQL data validation',
-  'CI maintenance',
-  'QA analytics',
-  'Stakeholder communication',
-  'Requirements analysis',
-  'Defect triage',
-  'Release verification',
-  'Defect analytics',
-]
 
 const TARGET_ROLE_OPTIONS = [
   'qa-analyst',
