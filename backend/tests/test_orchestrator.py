@@ -288,14 +288,19 @@ def test_matching_event_counts_the_whole_ranking(happy_path: Outcome) -> None:
     )
 
 
-def test_terminal_node_requests_consent_and_completes(happy_path: Outcome) -> None:
+def test_terminal_node_parks_the_run_waiting_for_consent(happy_path: Outcome) -> None:
+    """The run stops at the human gate; nothing is auto-accepted."""
     events = happy_path.emitted
-    statuses = [event.status for event in events]
-    assert statuses[-1] == "done"
-    assert statuses[-2] == "waiting_consent"
-    assert data_field(events[-2], "keys") == ["evidence_disclosure", "plan_acceptance"]
-    assert happy_path.result.status == "completed"
-    assert happy_path.session.status == "completed"
+    assert events[-1].agent == "ORCHESTRATOR"
+    assert events[-1].status == "waiting_consent"
+    assert data_field(events[-1], "keys") == ["evidence_disclosure", "plan_acceptance"]
+    assert data_field(events[-1], "blocking") is True
+    assert happy_path.result.status == "waiting"
+    assert happy_path.session.status == "waiting"
+    consent = happy_path.session.state["consent"]
+    assert isinstance(consent, dict)
+    assert consent["state"] == "pending"
+    assert consent["purpose"]
 
 
 def test_session_state_is_populated_by_the_agents(happy_path: Outcome) -> None:
@@ -363,9 +368,9 @@ def test_one_failing_node_does_not_abort_the_run(
     settings, store = build_store(tmp_path)
     outcome = run_pipeline(settings, store, "session-failure")
 
-    assert outcome.result.status == "completed"
+    assert outcome.result.status == "waiting"
     assert outcome.result.failed_nodes == ("SKILLS DISCOVERY",)
-    assert outcome.session.status == "completed"
+    assert outcome.session.status == "waiting"
     assert agent_order(outcome.emitted) == list(EXPECTED_AGENTS)
     assert_dense_stream(outcome.emitted, outcome.result.session_id)
 
@@ -406,7 +411,7 @@ def test_a_raising_transport_cannot_kill_the_run(tmp_path: Path) -> None:
         return stored
 
     stored = asyncio.run(scenario())
-    assert stored.status == "completed"
+    assert stored.status == "waiting"
     assert stored.events
     assert stored.audit_result is not None
 
@@ -420,8 +425,8 @@ def test_stale_version_is_retried_instead_of_raising(tmp_path: Path) -> None:
     assert racing.injected == STALE_UPDATES
     assert racing.updates > STALE_UPDATES
     assert outcome.result.failed_nodes == ()
-    assert outcome.result.status == "completed"
-    assert outcome.session.status == "completed"
+    assert outcome.result.status == "waiting"
+    assert outcome.session.status == "waiting"
     assert [event.model_dump() for event in outcome.session.events] == [
         event.model_dump() for event in outcome.emitted
     ]
@@ -524,7 +529,7 @@ def test_run_completes_without_langgraph(
         orchestrator.build_graph.cache_clear()
 
     assert outcome.result.used_langgraph is False
-    assert outcome.result.status == "completed"
+    assert outcome.result.status == "waiting"
     assert agent_order(outcome.emitted) == list(EXPECTED_AGENTS)
     assert_dense_stream(outcome.emitted, outcome.result.session_id)
     assert outcome.session.audit_result is not None

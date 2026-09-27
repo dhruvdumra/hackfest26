@@ -321,3 +321,15 @@ export function getEmployerDecision(jobPostId, options) {
     { baseUrl, signal },
   )
 }
+
+/** Kavya's answer to the orchestrator's consent request — the first Two-Key. */
+export function decideConsent(sessionId, payload, options) {
+  const { baseUrl, signal } = options ?? {}
+
+  return requestJson(`/session/${encodeURIComponent(String(sessionId ?? ''))}/consent`, {
+    method: 'POST',
+    body: payload,
+    baseUrl,
+    signal,
+  })
+}

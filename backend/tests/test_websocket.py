@@ -133,7 +133,7 @@ def wait_for_orchestration(client: TestClient, session_id: str) -> dict[str, Any
     while time.perf_counter() < deadline:
         payload = cast(dict[str, Any], client.get(f"/session/{session_id}").json())
         events = cast(list[dict[str, Any]], payload.get("events", []))
-        if payload.get("status") in {"completed", "failed"}:
+        if payload.get("status") in {"waiting", "completed", "failed"}:
             return payload
         if len(events) != observed:
             observed = len(events)
@@ -453,7 +453,7 @@ def test_post_session_start_runs_orchestration_without_blocking_request(
     assert payload["source"] in {"simulated", "local"}
     assert elapsed < POST_RETURN_BOUND_SECONDS
     assert len(cast(list[Any], completed["events"])) >= 1
-    assert completed["status"] in {"completed", "failed"}
+    assert completed["status"] in {"waiting", "completed", "failed"}
     assert len(cast(list[Any], immediate["events"])) < len(cast(list[Any], completed["events"]))
 
 

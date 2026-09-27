@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import AgentConsole from './components/AgentConsole.jsx'
+import ConsentCard from './components/ConsentCard.jsx'
 import GhostTwinPanel from './components/GhostTwinPanel.jsx'
 import HiringDecision from './components/HiringDecision.jsx'
 import Logo from './components/Logo.jsx'
@@ -282,19 +283,28 @@ export default function App() {
     ),
     audit: <GhostTwinPanel baseUrl={backendBaseUrl} />,
     keys: (
-      <EmployerRewritePanel
-        baseUrl={backendBaseUrl}
-        renderDecision={(rewrite) =>
-          // A post the filter hid nobody from has nothing to sign off.
-          typeof rewrite.hidden_talent_count === 'number' && rewrite.hidden_talent_count > 0 ? (
-            <HiringDecision
-              baseUrl={backendBaseUrl}
-              jobPostId={String(rewrite.job_post_id)}
-              hiddenTalentCount={rewrite.hidden_talent_count}
-            />
-          ) : null
-        }
-      />
+      <div className="space-y-24">
+        <ConsentCard
+          baseUrl={backendBaseUrl}
+          sessionId={sessionId}
+          session={session}
+          events={events}
+          onDecided={refreshSession}
+        />
+        <EmployerRewritePanel
+          baseUrl={backendBaseUrl}
+          renderDecision={(rewrite) =>
+            // A post the filter hid nobody from has nothing to sign off.
+            typeof rewrite.hidden_talent_count === 'number' && rewrite.hidden_talent_count > 0 ? (
+              <HiringDecision
+                baseUrl={backendBaseUrl}
+                jobPostId={String(rewrite.job_post_id)}
+                hiddenTalentCount={rewrite.hidden_talent_count}
+              />
+            ) : null
+          }
+        />
+      </div>
     ),
   }
 

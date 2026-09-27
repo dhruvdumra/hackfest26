@@ -281,6 +281,35 @@ class EmployerDecisionRecord(APIModel):
     source: Literal["simulated"] = "simulated"
 
 
+ConsentDecision = Literal["approve", "revoke"]
+
+
+class ConsentRequest(APIModel):
+    """The worker's key: approve or revoke sharing her Skill Passport."""
+
+    decision: ConsentDecision
+    actor: str = Field(default="Kavya", min_length=1, max_length=80)
+
+
+class ConsentReceipt(APIModel):
+    """A logged, purpose-bound and revocable consent decision.
+
+    The decision is a person's, made in this app, so it is ``local`` rather than
+    ``simulated``: nothing about it is a fixture.
+    """
+
+    receipt_id: str
+    session_id: str
+    decision: ConsentDecision
+    state: Literal["approved", "revoked"]
+    actor: str
+    purpose: str
+    keys: list[str]
+    decided_at: datetime
+    session_status: SessionStatus
+    source: Literal["local"] = "local"
+
+
 class SessionState(APIModel):
     session_id: str
     input_type: InputType

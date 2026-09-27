@@ -512,13 +512,14 @@ def test_no_sap_backed_payload_ever_claims_a_live_source(sap_surface: SapSurface
         assert values == {"local"}
 
 
-def _await_completed_session(client: TestClient, session_id: str) -> dict[str, Any]:
+def _await_settled_session(client: TestClient, session_id: str) -> dict[str, Any]:
+    """Poll until the run has stopped at the consent gate (or ended)."""
     payload: dict[str, Any] = {}
     for _ in range(SESSION_POLL_ATTEMPTS):
         payload = assert_ok_document(
             f"GET /session/{session_id}", client.get(f"/session/{session_id}"), SessionState
         )
-        if payload["status"] == "completed":
+        if payload["status"] in {"waiting", "completed"}:
             return payload
         time.sleep(SESSION_POLL_INTERVAL_SECONDS)
     return payload
@@ -542,9 +543,9 @@ def test_session_start_and_read_back_never_claim_a_live_source(
         )
         assert started["session_id"]
         assert started["source"] == "local"
-        session = _await_completed_session(client, started["session_id"])
+        session = _await_settled_session(client, started["session_id"])
 
-    assert session["status"] == "completed"
+    assert session["status"] == "waiting"
     assert session["source"] == "local"
     assert session["skills_source"] == "simulated"
     assert session["passport"]["source"] == "simulated"
@@ -610,7 +611,7 @@ def test_orchestrator_completes_every_agent_while_both_sap_integrations_are_unre
     assert all(event.source in PERMITTED_EVENT_SOURCES for event in result.events), (
         "every persisted event must carry one of live/simulated/local"
     )
-    assert stored.status == "completed"
+    assert stored.status == "waiting"
     assert stored.skills_source == "simulated"
     assert stored.route is not None
     assert stored.route.source == "simulated"

@@ -52,6 +52,7 @@ from typing import TYPE_CHECKING, Any, Final, TypedDict, cast
 from pydantic import JsonValue, TypeAdapter
 
 from app.config import Settings, session_source
+from app.domain.consent import CONSENT_KEYS, CONSENT_PURPOSE, CONSENT_STATE_KEY
 from app.domain.ghost_twin import GhostTwinOutcome, run_ghost_twin_audit
 from app.domain.passport import merge_skill_passport
 from app.mocks.employer_fixtures import employer_readiness_brief
@@ -209,10 +210,9 @@ async def run_orchestration(
 
     The session must already exist in ``store``; a missing session is the one
     case that fails the run, and it does so with a terminal event rather than an
-    exception. The session is left ``completed`` when the terminal node runs,
-    which is the documented demo behaviour: ``two_key_wait`` emits
-    ``waiting_consent`` and then the final ``done`` event instead of parking the
-    session in a non-terminal ``waiting`` state.
+    exception. A run that reaches ``two_key_wait`` ends ``waiting`` on a pending
+    consent request; the human answer arrives later through
+    ``POST /session/{id}/consent``.
     """
     emitter = EventEmitter(session_id=session.session_id, store=store, on_event=on_event)
     await emitter.hydrate()
@@ -657,54 +657,49 @@ async def _bias_audit(state: OrchestrationState) -> OrchestrationState:
 
 
 async def _two_key_wait(state: OrchestrationState) -> OrchestrationState:
-    """The human sign-off step, and the terminal node of the demo run.
+    """The human sign-off step, and the last node of the run.
 
-    The PRD pauses here for a human decision. This build emits the
-    ``waiting_consent`` event and then immediately emits the terminal ``done``
-    event and sets ``status="completed"``, so the demo always ends instead of
-    hanging on a prompt. A real consent round trip belongs in front of this node
-    and would branch out of the graph here.
+    The run stops here and waits for a person. The session is parked in
+    ``waiting`` with a pending consent request, and only
+    ``POST /session/{id}/consent`` moves it on: approving shares the passport
+    and completes the session, revoking withdraws it. Nothing is auto-accepted.
+
+    The session is updated before the event is emitted, so a client that reacts
+    to ``waiting_consent`` always finds the request it is answering.
     """
     emitter = state["emitter"]
     settings = state["settings"]
     store = state["store"]
     session_id = state["session_id"]
     source = session_source(settings)
+    keys: list[JsonValue] = list(CONSENT_KEYS)
     try:
+        await _update_session(
+            store,
+            session_id,
+            fields={"status": "waiting"},
+            state_entry=(
+                CONSENT_STATE_KEY,
+                {
+                    "phase": "two_key_wait",
+                    "keys": keys,
+                    "purpose": CONSENT_PURPOSE,
+                    "state": "pending",
+                    "blocking": True,
+                    "requested_at": datetime.now(UTC).isoformat(),
+                },
+            ),
+        )
         await emitter.emit(
             agent="ORCHESTRATOR",
             status="waiting_consent",
             message="Confirm the two keys: evidence disclosure and the re-routed plan",
             data={
                 "phase": "two_key_wait",
-                "keys": ["evidence_disclosure", "plan_acceptance"],
-                "blocking": False,
-            },
-            source=source,
-        )
-        await _update_session(
-            store,
-            session_id,
-            fields={"status": "completed"},
-            state_entry=(
-                "consent",
-                {
-                    "phase": "two_key_wait",
-                    "keys": ["evidence_disclosure", "plan_acceptance"],
-                    "state": "auto_accepted_for_demo",
-                    "blocking": False,
-                },
-            ),
-        )
-        await emitter.emit(
-            agent="ORCHESTRATOR",
-            status="done",
-            message="Demo sign-off recorded · the re-routed plan is ready for review",
-            data={
-                "phase": "two_key_wait",
-                "keys": ["evidence_disclosure", "plan_acceptance"],
-                "terminal": True,
-                "session_status": "completed",
+                "keys": keys,
+                "purpose": CONSENT_PURPOSE,
+                "blocking": True,
+                "session_status": "waiting",
             },
             source=source,
         )

@@ -6,7 +6,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import audit, health, learning_pathway, market, matching, sessions, skills
+from app.api import (
+    audit,
+    consent,
+    health,
+    learning_pathway,
+    market,
+    matching,
+    sessions,
+    skills,
+)
 from app.api.sessions import ORCHESTRATION_TASKS_STATE_KEY
 from app.config import Settings, get_settings
 from app.services import hana_client
@@ -56,6 +65,7 @@ def create_app(
     )
     application.include_router(health.router)
     application.include_router(sessions.router)
+    application.include_router(consent.router)
     application.include_router(audit.router)
     application.include_router(skills.router)
     application.include_router(learning_pathway.router)
