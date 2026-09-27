@@ -1,4 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ReRoute">
-  <rect width="64" height="64" rx="12" fill="#0A0A0A"/>
-  <text x="32" y="45" text-anchor="middle" font-family="Noto Serif, Cambria, Georgia, serif" font-size="40" font-weight="700" fill="#FAFAFA">R</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-3.6 2 28 28" width="64" height="64" role="img" aria-label="ReRoute">
+  <!--
+    The bolt, on the project's own canvas.
+
+    Two changes from the source SVG, both forced by this project rather than
+    preferred:
+
+    1. Fill is Chalk (#f3f3f3), not the source's #000000. The source is black
+       artwork for a light page; ReRoute's canvas is Obsidian #101010, where a
+       black glyph is very nearly invisible. A favicon also cannot rely on the
+       browser tab's own background, so the art carries its own surface.
+
+    2. The viewBox is re-centred. The source ships viewBox="-5.5 0 32 32"
+       while the ink actually occupies x 0–20.8, y 5.0–27.0 — the art sits in
+       the left two-thirds of its own box, so a naive drop-in renders a bolt
+       hugging the top-left corner with a large dead margin. This box is square
+       and centred on the ink, which is what a favicon and a 24px logomark both
+       need. The path data is untouched.
+  -->
+  <rect x="-3.6" y="2" width="28" height="28" rx="6" fill="#101010" />
+  <path d="M10.406 26.969l10.406-21.938-20.813 11.125h10.406v10.813z" fill="#f3f3f3" />
 </svg>
