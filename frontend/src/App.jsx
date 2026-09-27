@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
-import DotMapRoute from './components/DotMapRoute.jsx'
+import AgentConsole from './components/AgentConsole.jsx'
 import GhostTwinPanel from './components/GhostTwinPanel.jsx'
+import Logo from './components/Logo.jsx'
 import Manifesto from './components/Manifesto.jsx'
 import PipelineAgentGrid from './components/PipelineAgentGrid.jsx'
 import Reveal from './components/Reveal.jsx'
@@ -111,10 +112,29 @@ const HERO_SUBHEAD_GAP_CLASS = 'mt-6'
 const HERO_BADGE_GAP_CLASS = 'mt-10'
 const HERO_ACTIONS_GAP_CLASS = 'mt-5'
 
+/* The hero is two columns: the argument on the left, the run itself on the
+ * right.
+ *
+ * The old hero stacked the copy and then gave the full width underneath to a
+ * decorative dot-map illustration. A split lets the right column carry the same
+ * `events` array the WorkerApp panel reads, so the hero shows the pipeline
+ * actually running rather than a drawing of a path — and the moment the reader
+ * presses Run pipeline, the top of the page reacts.
+ *
+ * The console column is capped at 26rem rather than given half the grid. Half of
+ * 1200px is a 560px log, where every row truncates to a few words and the column
+ * reads as an empty table; 416px is wide enough for a full agent name and most
+ * of a message, and it leaves the headline the 700px it needs to stay on two
+ * lines at 63px. Below `lg` the grid collapses to one column and the console
+ * sits under the copy, full width. */
+const HERO_GRID_CLASS =
+  'grid items-start gap-16 lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-20'
+
+
 function Logomark() {
   return (
     <span aria-hidden="true" className={LOGOMARK_CLASS}>
-      R
+      <Logo size={14} />
     </span>
   )
 }
@@ -334,75 +354,75 @@ export default function App() {
 
             The base step is 32px, not the scale's 34px. At 34px "Every agent,"
             overflowed the 390px content measure and the headline broke into four
-            ragged lines — "Every / agent, / in / sequence." — which destroyed
-            the two-line shape the whole composition is built on. 32px holds the
+            ragged lines — "Every / agent, / in / sequence." — which destroyed the
+            two-line shape the whole composition is built on. 32px holds the
             first line as one unit, so the block is two lines on a phone and two
             lines on a desktop, which is the point of the line break. The 34px
             scale entry is still used by section headings. */}
         <div className={`${pageColumnClass} ${HERO_CLASS}`}>
-          <Reveal>
-            <h1
-              id="demo-title"
-              // `typeDisplayClass` is the display voice with no size of its own.
-              // The old `displayClass` carried `text-display` (63px), and since
-              // both land in the same cascade layer the token won at every width
-              // below `lg` — the headline was still 63px at 390px and broke into
-              // four ragged lines. The size is claimed here instead.
-              className={`${typeDisplayClass} ${chalkClass} text-[2rem] sm:text-heading-lg lg:text-display`}
-            >
-              Every agent,
-              <span className={`block italic ${smokeClass}`}>in sequence.</span>
-            </h1>
-          </Reveal>
+          <div className={HERO_GRID_CLASS}>
+            <div className="min-w-0">
+              <Reveal>
+                <h1
+                  id="demo-title"
+                  // `typeDisplayClass` is the display voice with no size of its own.
+                  // The old `displayClass` carried `text-display` (63px), and since
+                  // both land in the same cascade layer the token won at every width
+                  // below `lg` — the headline was still 63px at 390px and broke into
+                  // four ragged lines. The size is claimed here instead.
+                  className={`${typeDisplayClass} ${chalkClass} text-[2rem] sm:text-heading-lg lg:text-display`}
+                >
+                  Every agent,
+                  <span className={`block italic ${smokeClass}`}>in sequence.</span>
+                </h1>
+              </Reveal>
 
-          <Reveal delay={70} className={HERO_SUBHEAD_GAP_CLASS}>
-            <p className={`${subheadingClass} ${readingClass} ${smokeClass}`}>
-              A transparent view of the orchestration backbone as ReRoute turns a
-              career transition into a fair, evidence-led plan.
-            </p>
-          </Reveal>
+              <Reveal delay={70} className={HERO_SUBHEAD_GAP_CLASS}>
+                <p className={`${subheadingClass} ${readingClass} ${smokeClass}`}>
+                  A transparent view of the orchestration backbone as ReRoute
+                  turns a career transition into a fair, evidence-led plan.
+                </p>
+              </Reveal>
 
-          {/* The reference's own example prompt orders this block headline →
-              sub-headline → badge → buttons, which is what is built here; the
-              summary list in the build instructions puts the badge first, and
-              the component spec is the more specific of the two. */}
-          <Reveal delay={140} className={HERO_BADGE_GAP_CLASS}>
-            <StatusBadge
-              live={!demoMode}
-              label={`SLICE 04 · DEMO MODE ${demoMode ? 'ON' : 'OFF'}`}
-            />
-          </Reveal>
+              {/* The reference's own example prompt orders this block headline →
+                  sub-headline → badge → buttons, which is what is built here; the
+                  summary list in the build instructions puts the badge first, and
+                  the component spec is the more specific of the two. */}
+              <Reveal delay={140} className={HERO_BADGE_GAP_CLASS}>
+                <StatusBadge
+                  live={!demoMode}
+                  label={`SLICE 04 · DEMO MODE ${demoMode ? 'ON' : 'OFF'}`}
+                />
+              </Reveal>
 
-          <Reveal delay={210} className={HERO_ACTIONS_GAP_CLASS}>
-            <div className="flex flex-wrap items-center gap-4">
-              <Button
-                variant="glossy"
-                onClick={requestRun}
-                disabled={isBusy}
-                aria-busy={isBusy}
-                arrow="↗"
-              >
-                <Logomark />
-                Run pipeline
-              </Button>
-              <Button variant="ghost" arrow="↓" onClick={scrollToRoute}>
-                View route
-              </Button>
+              <Reveal delay={210} className={HERO_ACTIONS_GAP_CLASS}>
+                <div className="flex flex-wrap items-center gap-4">
+                  <Button
+                    variant="glossy"
+                    onClick={requestRun}
+                    disabled={isBusy}
+                    aria-busy={isBusy}
+                    arrow="↗"
+                  >
+                    <Logomark />
+                    Run pipeline
+                  </Button>
+                  <Button variant="ghost" arrow="↓" onClick={scrollToRoute}>
+                    View route
+                  </Button>
+                </div>
+              </Reveal>
             </div>
-          </Reveal>
-        </div>
 
-        {/* The dot-density route graphic sits exactly where the source's globe
-            sits: full-bleed, bleeding off the bottom of the hero. The 64px
-            under the CTA row is deliberate — the graphic is the thing the
-            reader is meant to arrive at, and the graphic itself supplies the
-            air below the copy. A bigger gap here just made an empty band.
-            A negative inline start pulls the graphic out to the true page
-            edges, because the content column's 32px gutter is not part of the
-            illustration. */}
-        <Reveal delay={280} className="mt-16">
-          <DotMapRoute className="-mx-6 sm:-mx-8" />
-        </Reveal>
+            {/* The live run, not a picture of one. It reads the same `events`
+                the WorkerApp panel below does, so the two columns cannot drift
+                apart, and the console sits in the hero rather than below the
+                fold where a run would only be visible after a scroll. */}
+            <Reveal delay={280} className="min-w-0">
+              <AgentConsole events={events} isStreaming={isStreaming} />
+            </Reveal>
+          </div>
+        </div>
 
         <div className={pageColumnClass}>
           <Section
