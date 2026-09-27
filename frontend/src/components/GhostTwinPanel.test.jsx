@@ -445,7 +445,7 @@ describe('GhostTwinPanel', () => {
     render(<GhostTwinPanel />)
     fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'could not reach the backend',
+      'The ReRoute backend is not answering',
     )
     expect(screen.getByRole('alert')).toHaveTextContent(
       'The audit could not be completed. Try the request again.',

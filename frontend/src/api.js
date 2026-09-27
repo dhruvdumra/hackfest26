@@ -166,8 +166,11 @@ async function requestJson(path, options) {
       throw error
     }
 
+    // Every panel shows this sentence when the backend is down, so it is
+    // written for the person at the screen: what happened and what to do. The
+    // URL stays on the error for debugging instead of in the copy.
     throw new ApiError(
-      `ReRoute could not reach the backend at ${url || 'the same origin'}.`,
+      'The ReRoute backend is not answering. Check that it is running, then try again.',
       { status: 0, detail: null, url },
     )
   }

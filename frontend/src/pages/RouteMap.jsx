@@ -286,8 +286,13 @@ export default function RouteMap({
     draft.hoursPerWeek >= MIN_HOURS_PER_WEEK &&
     draft.hoursPerWeek <= MAX_HOURS_PER_WEEK
 
+  // The last route asked for, so "Try again" can repeat it even while the
+  // compact mode keeps the form folded away.
+  const [lastQuery, setLastQuery] = useState(/** @type {any} */ (null))
+
   const runQuery = useCallback(
     async (query) => {
+      setLastQuery(query)
       // Cancel any route still in flight, so two quick submits cannot resolve out
       // of order and let the stale route win.
       activeRequestRef.current?.abort()
@@ -502,6 +507,16 @@ export default function RouteMap({
               {sourceDetails.detail}. Ask for the route again once the skills graph
               answers.
             </p>
+            {lastQuery === null ? null : (
+              <Button
+                variant="ghost"
+                className="mt-6"
+                onClick={() => void runQuery(lastQuery)}
+                disabled={isLoading}
+              >
+                Try again
+              </Button>
+            )}
           </div>
         )}
 

@@ -243,6 +243,10 @@ describe('API request helpers', () => {
 
     expect(error).toBeInstanceOf(ApiError)
     expect(error.status).toBe(0)
-    expect(error.message).toContain('http://127.0.0.1:8000/session/session-1')
+    // The message is for the person at the screen; the URL stays on the error.
+    expect(error.message).toBe(
+      'The ReRoute backend is not answering. Check that it is running, then try again.',
+    )
+    expect(error.url).toBe('http://127.0.0.1:8000/session/session-1')
   })
 })

@@ -421,4 +421,17 @@ describe('RouteMap', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Change the route' }))
     expect(screen.getByRole('button', { name: 'Build route' })).toBeInTheDocument()
   })
+
+  it('repeats the last route request from the error state, even with the form folded', async () => {
+    getRouteMock.mockRejectedValueOnce(new Error('The ReRoute backend is not answering.'))
+    getRouteMock.mockResolvedValueOnce(ROUTE)
+    render(<RouteMap autoRun compact />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
+
+    expect(
+      await screen.findByRole('list', { name: 'Route stations from Manual testing to QA Analyst' }),
+    ).toBeInTheDocument()
+    expect(getRouteMock).toHaveBeenCalledTimes(2)
+  })
 })

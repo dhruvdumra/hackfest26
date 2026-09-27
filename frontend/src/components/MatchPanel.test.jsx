@@ -221,4 +221,16 @@ describe('MatchPanel', () => {
       await screen.findByText(/The demo skills graph has no route to this role yet/),
     ).toBeInTheDocument()
   })
+
+  it('retries the ranking from the error state', async () => {
+    runMatchMock.mockRejectedValueOnce(
+      new ApiError('The ReRoute backend is not answering. Check that it is running, then try again.', 0),
+    )
+    render(<MatchPanel />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('7 roles ranked · 1 blocked · guardrail 15%')).toBeInTheDocument()
+    expect(runMatchMock).toHaveBeenCalledTimes(2)
+  })
 })

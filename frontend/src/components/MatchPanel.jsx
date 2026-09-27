@@ -77,6 +77,8 @@ export default function MatchPanel({
 }) {
   const [acceptPayCut, setAcceptPayCut] = useState(false)
   const [showAll, setShowAll] = useState(false)
+  // Bumped by "Try again": part of the request key, so it re-runs the request.
+  const [attempt, setAttempt] = useState(0)
   // One explanation open at a time, keyed by role, so the table stays a table.
   const [openRoleId, setOpenRoleId] = useState(/** @type {string | null} */ (null))
   // A session only matches its own passport once the skills agent has written
@@ -90,7 +92,7 @@ export default function MatchPanel({
   // One key per distinct request. The panel is loading until the settled
   // outcome carries the current key, so no state is set synchronously in the
   // effect and a superseded response can never be mistaken for the current one.
-  const requestKey = JSON.stringify([baseUrl, payload])
+  const requestKey = JSON.stringify([baseUrl, payload, attempt])
   const [outcome, setOutcome] = useState(
     /** @type {{ key: string | null, response: any, error: string }} */ ({
       key: null,
@@ -176,6 +178,9 @@ export default function MatchPanel({
         <div role="alert" className="py-12">
           <p className={sectionHeadingClass}>Matching unavailable</p>
           <p className={`mt-3 ${bodyCopyClass}`}>{error}</p>
+          <Button variant="ghost" className="mt-6" onClick={() => setAttempt((current) => current + 1)}>
+            Try again
+          </Button>
         </div>
       ) : response === null ? (
         <p className={`py-12 ${bodyCopyClass}`} role="status">
