@@ -7,7 +7,7 @@ shortlist filters are opaque, and the one number that governs the transition —
 a score — is a black box. ReRoute recovers the evidence, plans a credible route,
 and then **proves the ranking is fair by attacking it**.
 
-> **Team Ncrypt** · SAP Hackfest 2026 · `github.com/mevarx/hackfest26`
+> **Team ReRoute** · SAP Hackfest 2026 · `github.com/mevarx/hackfest26`
 
 ---
 
@@ -250,4 +250,4 @@ ReRoute_Style_Reference.md the ported design system
 
 ## Licence
 
-Team Ncrypt · SRM University AP
+Team ReRoute · SRM University AP

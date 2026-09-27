@@ -389,9 +389,12 @@ export default function App() {
                   summary list in the build instructions puts the badge first, and
                   the component spec is the more specific of the two. */}
               <Reveal delay={140} className={HERO_BADGE_GAP_CLASS}>
+                {/* A judge reads this badge, so it names the data source in their
+                    words rather than a build slice: demo mode replays a recorded
+                    agent run, and turning it off streams from the backend. */}
                 <StatusBadge
                   live={!demoMode}
-                  label={`SLICE 04 · DEMO MODE ${demoMode ? 'ON' : 'OFF'}`}
+                  label={demoMode ? 'Demo mode · recorded agent run' : 'Live backend · streaming'}
                 />
               </Reveal>
 
@@ -502,8 +505,8 @@ export default function App() {
           <Section
             id="audit"
             eyebrow="Stage 06 · Bias audit"
-            title="Rewrite the filter, not the shortlist."
-            description="What an employer's own job post does to their shortlist, and the evidence-led wording ReRoute swaps in once the audit flags the post."
+            title="Change one fact, and watch the score."
+            description="Every ranking is re-scored against Ghost Twins that differ from Kavya in exactly one attribute. If a twin moves more than the server's threshold, the decision is flagged for a human."
           >
             <Reveal>
               <GhostTwinPanel baseUrl={backendBaseUrl} />

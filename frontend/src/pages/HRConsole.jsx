@@ -658,25 +658,11 @@ export default function HRConsole({ baseUrl = '' }) {
 
   return (
     <div>
+      {/* App's <Section> already opens this region with its eyebrow, h2 and
+          description, so the panel carries only the provenance note. It used to
+          repeat a second headline and an internal build label here. */}
       <header className="pb-12">
-        <p className={sectionHeadingClass}>Employer readiness · Phase 4C</p>
-        {/* An h2, not a second h1: this panel renders inside App's page column,
-            which already owns the document's only h1. The reference's Headline
-            Display Block: line one at full weight in Chalk, line two the same
-            size in italic one step quieter, both left-aligned. "not the
-            shortlist" reads as the aside it is precisely because it is not
-            louder than the line above it. */}
-        <h2 className={`mt-4 max-w-2xl ${headingClass} ${chalkClass}`}>
-          Rewrite the filter,
-          <span className={`block italic ${smokeClass}`}>
-            not the shortlist.
-          </span>
-        </h2>
-        <p className={`mt-6 ${bodyCopyClass}`}>
-          What an employer&rsquo;s own job post does to their shortlist, and the
-          evidence-led wording ReRoute swaps in once the audit flags the post.
-        </p>
-        <p className={`mt-8 ${NOTE_CLASS}`}>
+        <p className={NOTE_CLASS}>
           Every number on this page is simulated. Both endpoints serve bundled
           demo fixtures and are wired to no applicant tracking system, job board
           or SAP service, so nothing here should be read as observed hiring data.
