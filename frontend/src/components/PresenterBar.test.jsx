@@ -73,6 +73,11 @@ describe('PresenterBar', () => {
     expect(screen.getByText('Demo · 5 steps')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Previous step' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Start the walkthrough' })).toBeEnabled()
+    // The arrow keys are announced, not only shown at xl as "← → keys".
+    expect(screen.getByRole('button', { name: 'Start the walkthrough' })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'ArrowRight',
+    )
   })
 
   it('names the step whose section has scrolled past the active line', () => {

@@ -115,6 +115,7 @@ export default function PresenterBar({
             onClick={onPrevious}
             disabled={isFirst}
             aria-label="Previous step"
+            aria-keyshortcuts="ArrowLeft"
           >
             ←
           </Button>
@@ -123,6 +124,7 @@ export default function PresenterBar({
             onClick={onNext}
             disabled={isLast}
             aria-label={current === null ? 'Start the walkthrough' : 'Next step'}
+            aria-keyshortcuts="ArrowRight"
           >
             {current === null ? 'Start' : '→'}
           </Button>
