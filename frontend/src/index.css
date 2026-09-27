@@ -14,6 +14,11 @@
        edge, so a nav link does not hide the section it just opened. */
     scroll-padding-top: 6rem;
     scroll-behavior: smooth;
+    /* R2: the R1 canvas was #101010, and a couple of rules hardcoded that
+       value here, which meant changing the token alone left a 1-value seam
+       between the body background and anything painting the canvas token.
+       The scrollbar and the body both read the token now. */
+    color-scheme: dark;
   }
 
   @media (prefers-reduced-motion: reduce) {

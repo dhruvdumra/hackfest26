@@ -326,13 +326,22 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
   const scoringMode = getScoringMode(simulateLegacyAts)
   const editedFields = getEditedFields(form)
   const hasPendingEdits = editedFields.length > 0
-  // The verdict is a Status Badge, the one component the reference builds a box
-  // for: a full-pill surface whose 6px prefix dot is Pulse Green on a live run
-  // and a Graphite outline otherwise. A completed audit inside the threshold is
-  // the live reading; FLAGGED takes the outline rather than borrowing a second
-  // accent colour for "bad".
+  /* The verdict's tone, and the reason this is a decision rather than a boolean.
+   *
+   * R1 rendered the verdict as a Status Badge and set `live` from the result, so
+   * a FLAGGED audit drew the same Graphite-outline dot and the same Smoke text
+   * as a clean PASS — 6.93:1 either way. The panel's whole output was
+   * indistinguishable between "this employer screens fairly" and "this employer
+   * costs Kavya six points for an 18-month break", which are not the same
+   * message at all.
+   *
+   * The verdict now takes the badge's explicit tone: emerald for a pass, amber
+   * for a flag. They are 122° apart, which survives every form of
+   * colour-vision deficiency, and both clear 10:1 on this canvas, so the state
+   * is carried by colour AND by the word AND by the dot's fill — never by one
+   * channel alone. */
   const verdictLabel = isPass ? 'PASS' : 'FLAGGED'
-  const verdictLive = isPass
+  const verdictTone = isPass ? 'accent' : 'flagged'
 
   return (
     <Card
@@ -575,7 +584,17 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
             </div>
             <div className={`${BLEED_BLOCK_CLASS} border-t ${ruleClass} pt-4`}>
               <p className={dataLabelClass}>Max delta</p>
-              <p className={`mt-1 ${metaClass} ${chalkClass}`}>
+              {/* The one number that carries the finding: it is zero on a fair
+                  screen and non-zero on a biased one. R1 set it in Chalk for
+                  every verdict, so the figure that proves the bias was the same
+                  colour as the figure that disproves it. It takes the verdict's
+                  colour, and the sign is spoken by the word beside it rather
+                  than by a glyph. */}
+              <p
+                className={`mt-1 ${metaClass} ${
+                  isFlagged ? 'text-flagged' : chalkClass
+                }`}
+              >
                 {formatScore(audit.max_delta)}
               </p>
             </div>
@@ -661,7 +680,17 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
                         </td>
                         <td
                           className={`py-4 pl-4 ${metaClass} ${
-                            twin.delta !== 0 ? chalkClass : smokeClass
+                            // A zero delta is the fair-screen result and stays
+                            // muted. A non-zero one is the finding, so it takes
+                            // the verdict's colour: a positive delta under a
+                            // legacy screen is a *cost* to the original
+                            // candidate, and the bar beside it is already drawn
+                            // in the same hue.
+                            twin.delta === 0
+                              ? smokeClass
+                              : isFlagged
+                                ? 'text-flagged'
+                                : chalkClass
                           }`}
                         >
                           {formatSignedDelta(twin.delta)}
@@ -690,13 +719,17 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
               aria-live="polite"
             >
               <div>
-                {/* The verdict is the one place on this screen the reference
-                    builds a box for: the Status Badge's full-pill surface, with a
-                    Pulse Green dot when the run passed and a Graphite outline
-                    when it did not. The sentence below carries the meaning, so
-                    the badge only has to name the state. */}
-                <StatusBadge label={verdictLabel} live={verdictLive} />
-                <p className={`mt-3 ${headingSmClass} ${chalkClass}`}>
+                {/* The verdict takes the badge's explicit tone rather than its
+                    liveness flag, so a FLAGGED result is amber and a PASS is
+                    emerald. The sentence below carries the meaning, so the
+                    badge only has to name the state — but it now also *shows*
+                    it, which is the whole point of the audit. */}
+                <StatusBadge label={verdictLabel} tone={verdictTone} />
+                <p
+                  className={`mt-3 ${headingSmClass} ${
+                    isPass ? chalkClass : 'text-flagged'
+                  }`}
+                >
                   {isPass
                     ? 'Fairness guardrail passed'
                     : 'Fairness guardrail needs attention'}

@@ -1,27 +1,78 @@
-/* ReRoute design tokens — Hyperstudio Ditto.
+/* ReRoute design tokens — R2 palette.
  *
- * Single source of truth: ReRoute_Style_Reference.md. Every value below is
- * transcribed from that document's token tables and Quick Start blocks. The
- * reference says "do not alter these values", so nothing here is invented.
+ * Origin: ReRoute_Style_Reference.md (Hyperstudio "Ditto"), with the colour
+ * values re-derived from a WCAG audit of that palette on this project's own
+ * canvas. Every R1 token NAME is preserved, so this is a value swap rather than
+ * a rewrite — no component changed its class list to adopt it.
  *
- * Tailwind v4 `@theme` emits these as real `:root` custom properties, so the
- * same names work as utilities (`bg-obsidian`, `text-chalk`, `border-graphite`,
- * `font-aeonik`, `text-display`, `rounded-badge`, `shadow-button`) and as plain
- * CSS vars (`var(--color-chalk)`).
+ * Why the values depart from the reference, which says "do not alter these
+ * values": R1 was a literal 1:1 port of a palette built for a different
+ * canvas, and three of its tokens fail on ours. The measurements:
+ *
+ *   Graphite #212121 on Obsidian #101010 = 1.18:1. The reference calls the 1px
+ *   rule "the page structure" — it was structurally invisible, and every
+ *   section division on the page was doing nothing. Borders now start at 1.33:1
+ *   and step up a real ladder.
+ *
+ *   Compass Gold #6f6759 on the same canvas = 3.41:1, and it was the ONLY
+ *   colour permitted for an icon. A 32px glyph in it is a smudge. Compass Gold
+ *   and Pulse Green are both retired in favour of one emerald accent at
+ *   10.6:1, which also removes a three-hue clash (warm gold, acid green, cool
+ *   grey) that had no reason to be in the system.
+ *
+ *   Carbon #080808 sat BELOW the Obsidian canvas, so the "deepest surface"
+ *   token was the wrong way up: elevation read as going darker rather than
+ *   lighter. The surface ladder is now monotonic — canvas → surface →
+ *   surface-2 → surface-3 — matching the model the elevation depends on, since
+ *   a drop shadow does not exist on near-black.
+ *
+ * One functional fix, which is the reason the palette was reworked at all:
+ * PASS and FLAGGED were both rendered as a Graphite outline dot plus Smoke
+ * text, 6.93:1 either way. The bias verdict — the product's entire argument —
+ * was visually identical to a clean bill of health. A verdict token now owns
+ * that state: FLAGGED takes amber, 122° of hue separation from the emerald
+ * PASS, which survives every form of colour-vision deficiency.
+ *
+ * Structural note: the R1 `--color-carbon` is retained as an alias of the new
+ * surface so the many `bg-carbon` form-control call sites keep working and keep
+ * meaning "the recessed field" rather than "a hole in the page".
  */
 @theme {
-  /* Colors */
-  --color-obsidian: #101010;
-  --color-carbon: #080808;
-  --color-chalk: #f3f3f3;
-  --color-smoke: #9c9c9c;
-  --color-ash: #c1c1c1;
-  --color-graphite: #212121;
-  --color-iron: #474747;
+  /* Colors — surfaces. A monotonic luminance ladder: every step up is a step
+     brighter, because that is the only elevation cue near-black supports.
+     Two steps is what the components actually consume — `bg-obsidian` for the
+     canvas, `bg-carbon` for a recessed field. R2 originally declared four
+     (`--color-surface`, `--color-surface-2`) as spare rungs for elevated
+     surfaces; nothing ever used them, so they are not here. Add them back at
+     the call site that needs them, not in advance of it. */
+  --color-obsidian: #0a0b0c;
+  --color-carbon: #121416;
+
+  /* Borders. Deliberately above every surface so a 1px rule is legible; R1's
+     primary border sat 1.18:1 above its own canvas. */
+  --color-graphite: #24282c;
+  --color-iron: #343a40;
+  --color-ash: #454c53;
+
+  /* Ink — three steps, and three is what the page uses: Chalk for primary
+     text, Smoke for body and secondary, Iron for a disabled or decorative
+     mark. R2 added a fourth `--color-muted` for a tertiary ink and then never
+     used it, because the 1px marks that would have taken it use a border
+     colour instead. Two inks and a border ladder carry the hierarchy. */
+  --color-chalk: #f2f4f5;   /* 17.9:1 — primary */
+  --color-smoke: #a8b0b8;   /*  9.0:1 — secondary, body copy */
+
+  /* The single chromatic accent, and the only colour an icon may take.
+     Replaces both Compass Gold (3.4:1) and Pulse Green. */
+  --color-compass-gold: #00d992;
   --color-signal-white: #ffffff;
-  --color-compass-gold: #6f6759;
-  --color-card-slate: #3b3d45;
-  --color-pulse-green: #98ff38;
+  --color-card-slate: #1a1d20;
+
+  /* Semantic. R1 reserved Pulse Green for one live dot and had no colour for
+     the FLAGGED verdict, which is why the two states were indistinguishable. */
+  --color-pulse-green: #00d992;      /* live status only */
+  --color-flagged: #ffb020;          /* 10.8:1 — a biased screening model */
+  --color-danger: #f2545b;           /*  5.8:1 — errors */
 
   /* Typography — two faces, both specified by the reference and both now
      actually loaded (see public/fonts/fonts.css). The reference's Aeonik is
@@ -71,25 +122,28 @@
   --leading-subheading: 1.25;
   --leading-heading-sm: 1.22;
   --leading-heading: 1.15;
-  --leading-heading-lg: 1.1;
   --leading-display: 1.05;
 
   /* Typography — Letter spacing. The reference gives these in em in the
      typography section and in px in Quick Start; the two agree (-0.011em at
      63px = -0.69px, -0.007em at 44px = -0.31px), so the px form is used to
-     match its Tailwind block. Input's meta tracking is em-based. */
-  --tracking-heading-lg: -0.31px;
+     match its Tailwind block. Input's meta tracking is em-based.
+
+     `--tracking-heading-lg` and `--tracking-meta-tight` are gone: the hero
+     headline pairs `tracking-display` with a responsive size, so a second
+     heading token was never claimed, and the meta voice uses one tracking
+     value. A scale rung with no caller is a second place for the type to drift. */
   --tracking-display: -0.69px;
   --tracking-meta: -0.022em;
-  --tracking-meta-tight: -0.037em;
   --tracking-button: 0.02em;
   --tracking-badge: 0.05em;
 
-  /* Border radius */
+  /* Border radius. `--radius-icon` is gone: the icon-avatar circle is 24px, so
+     it is written `rounded-full` at the call site, and a 99px token for a 24px
+     circle is a value that can only ever be right once. */
   --radius-badge: 9999px;
   --radius-card: 12px;
   --radius-button: 14px;
-  --radius-icon: 99px;
 
   /* The one shadow in the system: the glossy pill's own bevel. The reference
      forbids every other drop shadow, so it lives here as a named token rather
@@ -104,35 +158,51 @@
    `--spacing` multiplier, and claiming the `--spacing-*` namespace here would
    change what `p-4` / `gap-8` resolve to. */
 :root {
-  /* Spacing — base unit 4px */
+  /* Spacing — base unit 4px. Only the rungs something actually quotes. The
+     reference's scale ran to 40px; nothing here uses a 40px step, and Tailwind's
+     own `--spacing` multiplier already covers the arithmetic for anyone who
+     needs one. */
   --spacing-4: 4px;
   --spacing-8: 8px;
   --spacing-12: 12px;
   --spacing-16: 16px;
   --spacing-20: 20px;
-  --spacing-24: 24px;
-  --spacing-40: 40px;
 
-  /* Layout */
+  /* Layout.
+
+     The reference quotes the 1200px column, the 620px reading measure and the
+     600px manifesto measure as numbers. In this build they are not read from
+     here: `pageColumnClass` writes `max-w-[75rem]` (1200px) and
+     `readingClass` writes `max-w-[38.75rem]` (620px) as Tailwind
+     arbitrary values, because a class in the shared class map is what the
+     components compose and a `var()` indirection would be one more hop for
+     no benefit. Declaring the same number twice, once read and once not, is
+     how the two drift apart — so the read side is removed.
+
+     The range tokens (`--section-gap-*`, `--card-padding-*`,
+     `--element-gap`) are worse: they describe min/max pairs and a single gap
+     value, and no caller ever read either end. They are gone rather than left
+     as documentation of a spacing rhythm the stylesheet does not encode. */
   --page-max-width: 1200px;
-  --reading-max-width: 620px;
-  --manifesto-max-width: 600px;
-  --section-gap-min: 120px;
-  --section-gap-max: 210px;
-  --card-padding-min: 32px;
-  --card-padding-max: 48px;
-  --element-gap: 20px;
 
-  /* The glossy pill's gradient, verbatim from the component spec. */
-  --button-gradient: linear-gradient(180deg, #ffffff 0%, #e9e9e6 100%);
+  /* The ghost outline's translucent surface, verbatim from the spec. The
+     surface pair is declared here but read from the class map as literal
+     rgba() values in `buttonGhostClass`, so only the border — which the class
+     map does read as `var(--ghost-border)` — is kept. */
+  --ghost-border: #343a40;
 
-  /* The ghost outline's translucent surface, verbatim from the spec. */
-  --ghost-surface: rgba(255, 255, 255, 0.03);
-  --ghost-surface-hover: rgba(255, 255, 255, 0.06);
-  --ghost-border: #2a2a2a;
+  /* The status badge's own two values. R1 hardcoded a #1a1a1a surface against
+     a #212121 border — 1.19:1, i.e. a border you could not see. The surface is
+     now a real step above the canvas and the border is a real step above the
+     surface.
 
-  /* The status badge's own two values, which the spec writes as literals
-     outside the token table (#1a1a1a background, #212121 border). */
-  --color-badge-surface: #1a1a1a;
-  --color-badge-border: #212121;
+     R2 also declared a seven-token `--verdict-*` block (a pass tint, a flag tint
+     and a line colour for each) intended to colour the bias-audit card. The
+     audit ended up using the `flagged` / `accent` colour tokens directly via
+     Tailwind utilities, which is what a component needs anyway, so the block
+     never had a single `var()` reference. It is removed rather than left as a
+     parallel description of a palette the code does not read. */
+  --color-badge-surface: #121416;
+  --color-badge-border: #343a40;
 }
+

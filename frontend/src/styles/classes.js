@@ -38,32 +38,20 @@ export const manifestoClass = 'max-w-[37.5rem]'
 
 /* ── Vertical rhythm ──────────────────────────────────────────────────────
  *
- * A short named scale rather than a pile of one-off `mt-*` values at the call
- * sites. Every gap on the page is one of these, which is what lets the eye
- * read the page as a stack of the same few intervals instead of a pile of
- * unrelated numbers. The values are 4px-grid multiples.
+ * R1 declared a named gap scale here — `gapLabelClass`, `gapHeadingClass`,
+ * `gapBlockClass`, `gapGroupClass`, `gapPanelClass`, `gapSectionClass` — and a
+ * `measureClass` beside `readingClass`. All seven are gone.
+ *
+ * The six gap names had zero call sites anywhere: every panel wrote its own
+ * literal `mt-*`, so the scale described a rhythm the components did not
+ * follow, which is worse than no scale at all — it reads as a system and
+ * invites the next change to quote a name that nothing else uses. The two
+ * composites that did quote `measureClass` now quote `readingClass`, which held
+ * the identical value, so one name now carries the reading measure.
+ *
+ * If a named scale is wanted, it should land at the call sites in the same
+ * change that introduces it, not be declared and left unread.
  */
-
-/** Ties a label to the thing it names. */
-export const gapLabelClass = 'mt-2'
-
-/** Ties a heading to the copy that introduces it. */
-export const gapHeadingClass = 'mt-3'
-
-/** Separates two blocks of the same kind — a paragraph from a paragraph. */
-export const gapBlockClass = 'mt-4'
-
-/** Separates a run of content from a new group inside a panel. */
-export const gapGroupClass = 'mt-8'
-
-/** Separates two sibling groups in a panel. The panel's own sections. */
-export const gapPanelClass = 'mt-16'
-
-/** A section's air above its hairline and below it. */
-export const gapSectionClass = 'mt-28 pt-28'
-
-/** Reading measure + type together, for the hero sub-headline. */
-export const measureClass = 'max-w-[38.75rem]'
 
 /* ── Type voices ──────────────────────────────────────────────────────── */
 
@@ -116,7 +104,7 @@ export const panelEyebrowClass = `${metaClass} ${smokeClass}`
 export const panelTitleClass = headingSmClass
 
 /** Panel description: one measure of body copy, muted. */
-export const panelDescriptionClass = `mt-3 ${bodyClass} ${smokeClass} ${measureClass}`
+export const panelDescriptionClass = `mt-3 ${bodyClass} ${smokeClass} ${readingClass}`
 
 /** Small-caps label that opens a block inside a panel. */
 export const sectionHeadingClass = `${metaClass} ${smokeClass} uppercase`
@@ -131,15 +119,12 @@ export const inlineLabelClass = `font-aeonik text-body font-medium ${chalkClass}
 export const metaRowClass = `flex flex-wrap items-center gap-x-4 gap-y-1 ${metaClass} ${smokeClass}`
 
 /** Reading-width body paragraph. */
-export const bodyCopyClass = `${bodyClass} ${smokeClass} ${measureClass}`
+export const bodyCopyClass = `${bodyClass} ${smokeClass} ${readingClass}`
 
 /* ── Structural ───────────────────────────────────────────────────────── */
 
 /** Page content column. The reference forbids breaking the 1200px width. */
 export const pageColumnClass = 'mx-auto w-full max-w-[75rem] px-6 sm:px-8'
-
-/** A full-content-width 1px Graphite rule. "The line IS the page structure." */
-export const dividerClass = 'h-px w-full bg-graphite'
 
 /** Block border for cards and grids: Graphite on the sides and bottom, never
  *  the top, so a cell merges with the section divider above it. */
@@ -176,9 +161,14 @@ export const buttonGlossyClass =
   'rounded-button bg-[linear-gradient(180deg,#ffffff_0%,#e9e9e6_100%)] text-obsidian shadow-button hover:brightness-[1.04]'
 
 /** The ghost outline. No fill to speak of, no shadow, and on hover the surface
- *  lightens — the border colour never changes. */
+ *  lightens — the border colour never changes.
+ *
+ *  R1 spelled the border as a literal `#2a2a2a`, which is 1.26:1 on the R1
+ *  canvas and therefore a button you could not see the edge of. It now reads
+ *  `--ghost-border`, which is the Iron token, so the outline and the rest of
+ *  the page's hairlines are one system. */
 export const buttonGhostClass =
-  'rounded-button border border-[#2a2a2a] bg-[rgba(255,255,255,0.03)] text-chalk hover:bg-[rgba(255,255,255,0.06)]'
+  'rounded-button border border-[var(--ghost-border)] bg-[rgba(255,255,255,0.03)] text-chalk hover:bg-[rgba(255,255,255,0.06)]'
 
 /** Every button is 44px tall, matching every form control, so a button sitting
  *  inline with a field lines up with it. */
@@ -189,9 +179,11 @@ export const buttonBaseClass =
 
 /* ── Status ───────────────────────────────────────────────────────────── */
 
-/** The status badge's Pulse Green dot: 6px, solid, with the reference's
- *  "very subtle glow". This is the only place Pulse Green is used. */
-export const pulseDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-pulse-green shadow-pulse'
+/* R2 note: `pulseDotClass` used to live here and carried the live dot's colour,
+ * size and glow in one string. StatusBadge now owns the accent colour in its
+ * tone map and applies `inlineDotClass` for the geometry, so this export had no
+ * call sites — the composition that replaced it emitted the size utilities
+ * twice. The live dot is the `accent` tone in StatusBadge.jsx. */
 
 /** A plain inline status mark for text that is not a badge — a dot plus a word,
  *  never a pill. Used where a value needs a live/done cue without earning the

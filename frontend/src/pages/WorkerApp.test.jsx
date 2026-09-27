@@ -230,12 +230,16 @@ describe('WorkerApp', () => {
     expect(verifiedDot).toHaveAttribute('aria-hidden', 'true')
     expect(unverifiedDot).toHaveAttribute('aria-hidden', 'true')
 
-    // Verified is the filled Pulse Green live dot, unverified a Graphite
-    // outline — two different shapes, so the state survives without colour, and
-    // Pulse Green never leaks onto a claim that is not live.
+    // Verified is the filled accent dot, unverified an untinted outline — two
+    // different shapes, so the state survives without colour, and the accent
+    // never leaks onto a claim that is not live.
+    //
+    // The unverified outline is Iron, not Graphite: R1 drew it in the same
+    // border the badge itself used, at 1.18:1 against this badge's own surface,
+    // so the "unverified" dot was effectively invisible inside its own pill.
     expect(verifiedDot).toHaveClass('bg-pulse-green')
-    expect(verifiedDot).not.toHaveClass('border-graphite')
-    expect(unverifiedDot).toHaveClass('border-graphite')
+    expect(verifiedDot).not.toHaveClass('border-iron')
+    expect(unverifiedDot).toHaveClass('border-iron')
     expect(unverifiedDot).not.toHaveClass('bg-pulse-green')
   })
 
@@ -249,12 +253,13 @@ describe('WorkerApp', () => {
 
     expect(within(credentials).getByText('Manual testing')).toBeInTheDocument()
     // The source is the reference's one status badge, so the label is the badge's
-    // own text — and a simulated source takes the Graphite dot, not the live one.
+    // own text — and a simulated source takes the untinted outline, not the live
+    // accent dot.
     const sourceBadge = screen.getByText('simulated')
 
     expect(sourceBadge).toHaveClass('rounded-badge')
     expect(sourceBadge.querySelector('[data-status-dot]')).toHaveClass(
-      'border-graphite',
+      'border-iron',
     )
     expect(screen.queryByText('live')).not.toBeInTheDocument()
   })

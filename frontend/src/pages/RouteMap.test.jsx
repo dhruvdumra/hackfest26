@@ -167,23 +167,23 @@ describe('RouteMap', () => {
     const { unmount } = render(<RouteMap />)
 
     // Before a route exists the source is a gap, not a state: the badge says so
-    // and keeps the Graphite dot.
+    // and keeps the untinted Iron outline.
     const pendingBadge = within(panelHeader()).getByText('source pending')
 
     expect(pendingBadge).toHaveClass('rounded-badge')
     expect(pendingBadge.querySelector('[data-status-dot]')).toHaveClass(
-      'border-graphite',
+      'border-iron',
     )
 
     getRouteMock.mockResolvedValue(ROUTE)
     fireEvent.click(screen.getByRole('button', { name: 'Build route' }))
 
-    // A fixture answer is honest about not being live, so it takes the outline
-    // dot rather than the Pulse Green one.
+    // A fixture answer is honest about not being live, so it takes the untinted
+    // outline dot rather than the accent one.
     const simulatedBadge = await within(panelHeader()).findByText('simulated')
 
     expect(simulatedBadge.querySelector('[data-status-dot]')).toHaveClass(
-      'border-graphite',
+      'border-iron',
     )
     expect(
       simulatedBadge.querySelector('[data-status-dot]'),

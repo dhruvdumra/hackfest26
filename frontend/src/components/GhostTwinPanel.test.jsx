@@ -301,10 +301,10 @@ describe('GhostTwinPanel', () => {
       'bg-pulse-green',
     )
     // A passing verdict is the reference's Status Badge: the full-pill surface
-    // with a filled Pulse Green live dot. The pill's own bevel is the only
-    // shadow in the system, so the badge box itself carries none.
+    // with a filled accent dot. The pill's own bevel is the only shadow in the
+    // system, so the badge box itself carries none.
     const { badge: passBadge, dot: passDot } = readStatusBadge(passVerdict)
-    expect(passBadge).toHaveClass('rounded-badge', 'border-graphite')
+    expect(passBadge).toHaveClass('rounded-badge', 'border-iron')
     expect(passDot).toHaveClass('bg-pulse-green')
     expect(passBadge.className).not.toMatch(/shadow-/)
     expect(screen.getByText('Pure-Python calculation')).toBeInTheDocument()
@@ -350,16 +350,30 @@ describe('GhostTwinPanel', () => {
     expect(secondRowCells[0]).toHaveTextContent('86')
     expect(secondRowCells[1]).toHaveTextContent('98')
     expect(secondRowCells[2]).toHaveTextContent('+12')
-    // A flagged run is the honest opposite of a live one, so the verdict keeps
-    // the same pill and swaps the Pulse Green dot for the Graphite outline
-    // rather than borrowing a second accent for "bad".
+    /* A flagged run is the finding the product exists to produce, so it gets
+     * its own colour rather than the "not live" outline.
+     *
+     * R1 rendered the FLAGGED verdict as the same Graphite outline dot and the
+     * same Smoke text as a clean PASS — 6.93:1 either way, so the panel's most
+     * important output was visually identical to a bill of health. Amber is
+     * 122° from the emerald a PASS uses, which survives every form of
+     * colour-vision deficiency, and the word is still in the DOM, so the state
+     * never depends on colour alone. */
     const { badge: flaggedBadge, dot: flaggedDot } = readStatusBadge(flaggedVerdict)
-    expect(flaggedBadge).toHaveClass('rounded-badge', 'border-graphite')
-    expect(flaggedDot).toHaveClass('border', 'border-graphite')
+    expect(flaggedBadge).toHaveClass('rounded-badge', 'border-iron')
+    expect(flaggedDot).toHaveClass('bg-flagged')
     expect(flaggedDot).not.toHaveClass('bg-pulse-green')
+    // The ink follows the verdict, so the badge is amber rather than Smoke.
+    expect(flaggedBadge).toHaveClass('text-flagged')
+    // The headline carries the same colour, and the max-delta figure does too:
+    // the number that proves the bias must not share the colour of the run that
+    // disproved it.
+    expect(screen.getByText('Fairness guardrail needs attention')).toHaveClass(
+      'text-flagged',
+    )
+    expect(screen.getByText('12')).toHaveClass('text-flagged')
     expect(flaggedBadge.className).not.toMatch(/shadow-/)
     expect(flaggedVerdict.closest('[role="status"]')).not.toBeNull()
-    expect(screen.getByText('Fairness guardrail needs attention')).toBeInTheDocument()
     expect(screen.getByText('Source=local')).toBeInTheDocument()
     expect(screen.queryByText('PASS')).not.toBeInTheDocument()
   })

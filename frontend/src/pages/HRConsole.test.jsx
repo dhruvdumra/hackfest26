@@ -108,18 +108,20 @@ describe('HRConsole', () => {
     await screen.findByTestId('hidden-talent-count')
 
     // Each block header carries the reference's full-pill Status Badge. Both
-    // endpoints serve bundled fixtures, so both are non-live: the Graphite
-    // outline dot, never the Pulse Green live dot.
+    // endpoints serve bundled fixtures, so both are non-live: the untinted Iron
+    // outline dot, never the accent live dot. (Iron, not the R1 Graphite — the
+    // old value sat 1.18:1 against this badge's own surface, so the dot was
+    // invisible inside its own pill.)
     const badges = screen.getAllByText('simulated')
     expect(badges).toHaveLength(2)
     badges.forEach((word) => {
       const badge = word.closest('span.rounded-badge')
       expect(badge).not.toBeNull()
-      expect(badge).toHaveClass('border-graphite')
+      expect(badge).toHaveClass('border-iron')
     })
     expect(container.querySelectorAll('[data-status-dot]')).toHaveLength(2)
     container.querySelectorAll('[data-status-dot]').forEach((dot) => {
-      expect(dot).toHaveClass('border-graphite')
+      expect(dot).toHaveClass('border-iron')
       expect(dot).not.toHaveClass('bg-pulse-green')
     })
 
