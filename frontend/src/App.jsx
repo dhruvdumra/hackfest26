@@ -9,6 +9,7 @@ import Manifesto from './components/Manifesto.jsx'
 import MatchPanel from './components/MatchPanel.jsx'
 import PipelineAgentGrid from './components/PipelineAgentGrid.jsx'
 import PresenterBar from './components/PresenterBar.jsx'
+import RadarStrip from './components/RadarStrip.jsx'
 import Reveal from './components/Reveal.jsx'
 import SessionCard from './components/SessionCard.jsx'
 import StatusBadge from './components/StatusBadge.jsx'
@@ -22,10 +23,7 @@ import { startSession } from './api.js'
 import { useSessionStream } from './hooks/useSessionStream.js'
 import { useAgentStream } from './hooks/useAgentStream.js'
 import { usePresenterNavigation } from './hooks/usePresenterNavigation.js'
-import {
-  DisplacementRadarPanel,
-  EmployerRewritePanel,
-} from './pages/HRConsole.jsx'
+import { EmployerRewritePanel } from './pages/HRConsole.jsx'
 import RouteMap from './pages/RouteMap.jsx'
 import WorkerApp from './pages/WorkerApp.jsx'
 import {
@@ -301,20 +299,27 @@ export default function App() {
         />
       </div>
     ),
+    // One screen, not three: the radar is a one-line before/after strip, and on
+    // a wide screen the route and the ranking sit side by side, so the
+    // presenter lands on the whole step without scrolling through it.
     route: (
-      <div className="space-y-24">
-        <DisplacementRadarPanel baseUrl={backendBaseUrl} />
-        {/* Keyed on the start skill so the map re-seeds once the passport lands. */}
-        <RouteMap
-          key={routeStart}
-          baseUrl={backendBaseUrl}
-          initialFromSkill={routeStart}
-        />
-        <MatchPanel
-          baseUrl={backendBaseUrl}
-          sessionId={sessionId}
-          passportId={session?.passport?.passport_id ?? null}
-        />
+      <div className="space-y-12">
+        <RadarStrip baseUrl={backendBaseUrl} />
+        <div className="grid gap-16 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:gap-12">
+          {/* Keyed on the start skill so the map re-seeds once the passport lands. */}
+          <RouteMap
+            key={routeStart}
+            baseUrl={backendBaseUrl}
+            initialFromSkill={routeStart}
+            autoRun
+            compact
+          />
+          <MatchPanel
+            baseUrl={backendBaseUrl}
+            sessionId={sessionId}
+            passportId={session?.passport?.passport_id ?? null}
+          />
+        </div>
       </div>
     ),
     audit: <GhostTwinPanel baseUrl={backendBaseUrl} />,

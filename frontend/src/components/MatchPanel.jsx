@@ -188,7 +188,7 @@ export default function MatchPanel({
             aria-label="Scrollable role ranking"
             className={`mt-8 w-full overflow-x-auto ${FOCUS_RING_CLASS}`}
           >
-            <table className="w-full min-w-[40rem] text-left">
+            <table className="w-full min-w-[34rem] text-left">
               <caption className="sr-only">
                 Roles ranked for Kavya, with the wage-scar guardrail applied
               </caption>
@@ -233,7 +233,7 @@ export default function MatchPanel({
                           {isBlocked ? (
                             <>
                               <StatusBadge tone="danger" label="Blocked" />
-                              <p className={`mt-2 max-w-[18rem] ${bodyClass} text-sm ${smokeClass}`}>
+                              <p className={`mt-2 max-w-[14rem] ${bodyClass} text-sm ${smokeClass}`}>
                                 {match.guardrail_reason ?? 'Blocked by the wage-scar guardrail.'}
                               </p>
                             </>

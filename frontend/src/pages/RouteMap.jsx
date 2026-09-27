@@ -61,7 +61,7 @@ const SOURCE_DETAIL_CLASS = `${metaClass} ${smokeClass}`
 // one. No pill radius, no gradient, no fade.
 const CONNECTOR_CLASS = 'bg-graphite'
 const STATION_DOT_BASE_CLASS =
-  'relative z-10 h-4 w-4 shrink-0 rounded-full border sm:h-5 sm:w-5'
+  'relative z-10 h-4 w-4 shrink-0 rounded-full border @xl:h-5 @xl:w-5'
 
 // Every station is a Graphite-outlined circle on the bare canvas, so the line
 // reads straight through the track. The target role is the one node the whole
@@ -251,6 +251,11 @@ export default function RouteMap({
   initialFromSkill = DEFAULT_FROM_SKILL,
   initialTargetRole = DEFAULT_TARGET_ROLE,
   initialHoursPerWeek = DEFAULT_HOURS_PER_WEEK,
+  // The demo page opts into both: the route builds itself on mount, so step 03
+  // opens on a route rather than on an empty form, and the planning form folds
+  // behind "Change the route" until someone wants a different one.
+  autoRun = false,
+  compact = false,
 }) {
   // `hoursPerWeek` is `number | ''`: an emptied number input must stay empty
   // rather than silently becoming 0, which the API rejects.
@@ -262,6 +267,7 @@ export default function RouteMap({
   const [route, setRoute] = useState(/** @type {RouteResponse | null} */ (null))
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [isFormOpen, setIsFormOpen] = useState(!compact)
   const activeRequestRef = useRef(/** @type {AbortController | null} */ (null))
 
   useEffect(
@@ -310,6 +316,25 @@ export default function RouteMap({
     },
     [baseUrl],
   )
+
+  // Mount-only, like the other panels' first fetch: the initial draft is the
+  // route the page asked for, and later edits run through the form.
+  const initialQuery = useRef({
+    fromSkill: initialFromSkill,
+    targetRole: initialTargetRole,
+    hoursPerWeek: initialHoursPerWeek,
+  })
+
+  useEffect(() => {
+    if (!autoRun) {
+      return
+    }
+
+    queueMicrotask(() => {
+      void runQuery(initialQuery.current)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount fetch only
+  }, [])
 
   function handleFromSkillChange(event) {
     const value = event.target.value
@@ -363,11 +388,15 @@ export default function RouteMap({
       // tests, which used to anchor on the heading that has now moved up a
       // level — a heading is a label, not a handle.
       data-testid="route-map"
+      // In compact mode the badge rides in the route's own header row instead,
+      // so it is not stranded on a line of its own above it.
       actions={
-        <StatusBadge
-          live={sourceDetails.source === 'live'}
-          label={sourceDetails.label}
-        />
+        compact ? undefined : (
+          <StatusBadge
+            live={sourceDetails.source === 'live'}
+            label={sourceDetails.label}
+          />
+        )
       }
       aria-busy={isLoading}
       padding="none"
@@ -377,75 +406,88 @@ export default function RouteMap({
       // well inside the column so the three fields do not stretch. The panel
       // itself takes no border and no fill — the reference reserves both for the
       // badge and the glossy pill.
-      className="max-w-[52rem]"
+      //
+      // It is also a size container: the station track, the summary and the
+      // form switch to their row layouts on the panel's own width (@xl, 36rem),
+      // not the viewport's, so the map holds together in a half-width column.
+      className="@container max-w-[52rem]"
     >
-      <div className="space-y-16">
-        <form className={SECTION_CLASS} onSubmit={handleSubmit}>
-          {/* The badge describes the route below, so it shares the row that
-              introduces it. It used to be the Card's `actions` slot, which
-              orphaned it above a hairline that separated it from nothing. */}
-          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+      <div className={compact ? 'space-y-10' : 'space-y-16'}>
+        {isFormOpen ? null : (
+          <div className={`${SECTION_CLASS} flex flex-wrap items-center justify-between gap-4`}>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className={sectionHeadingClass}>Learning route</p>
+              <StatusBadge
+                live={sourceDetails.source === 'live'}
+                label={sourceDetails.label}
+              />
+            </div>
+            <Button variant="ghost" onClick={() => setIsFormOpen(true)}>
+              Change the route
+            </Button>
+          </div>
+        )}
+        {isFormOpen ? (
+          <form className={SECTION_CLASS} onSubmit={handleSubmit}>
+            {/* The source badge sits once, in the panel header. This row used to
+                repeat it, so the panel showed the same badge twice. */}
             <p className={sectionHeadingClass}>Plan a different route</p>
-            <StatusBadge
-              live={sourceDetails.source === 'live'}
-              label={sourceDetails.label}
-            />
-          </div>
 
-          <div className="mt-8 grid gap-8 sm:grid-cols-3">
-            <Field id="route-from-skill" label="From skill">
-              <TextInput
-                id="route-from-skill"
-                list="route-skill-options"
-                value={draft.fromSkill}
-                onChange={handleFromSkillChange}
-              />
-              <datalist id="route-skill-options">
-                {SKILL_OPTIONS.map((skill) => (
-                  <option key={skill} value={skill} />
-                ))}
-              </datalist>
-            </Field>
+            <div className="mt-8 grid gap-8 @xl:grid-cols-3">
+              <Field id="route-from-skill" label="From skill">
+                <TextInput
+                  id="route-from-skill"
+                  list="route-skill-options"
+                  value={draft.fromSkill}
+                  onChange={handleFromSkillChange}
+                />
+                <datalist id="route-skill-options">
+                  {SKILL_OPTIONS.map((skill) => (
+                    <option key={skill} value={skill} />
+                  ))}
+                </datalist>
+              </Field>
 
-            <Field id="route-target-role" label="Target role">
-              <Select
-                id="route-target-role"
-                value={draft.targetRole}
-                onChange={handleTargetRoleChange}
-              >
-                {TARGET_ROLE_OPTIONS.map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+              <Field id="route-target-role" label="Target role">
+                <Select
+                  id="route-target-role"
+                  value={draft.targetRole}
+                  onChange={handleTargetRoleChange}
+                >
+                  {TARGET_ROLE_OPTIONS.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
 
-            <Field id="route-hours-per-week" label="Hours per week">
-              <NumberInput
-                id="route-hours-per-week"
-                min={MIN_HOURS_PER_WEEK}
-                max={MAX_HOURS_PER_WEEK}
-                value={draft.hoursPerWeek}
-                onChange={handleHoursPerWeekChange}
-              />
-            </Field>
-          </div>
+              <Field id="route-hours-per-week" label="Hours per week">
+                <NumberInput
+                  id="route-hours-per-week"
+                  min={MIN_HOURS_PER_WEEK}
+                  max={MAX_HOURS_PER_WEEK}
+                  value={draft.hoursPerWeek}
+                  onChange={handleHoursPerWeekChange}
+                />
+              </Field>
+            </div>
 
-          {/* The one button in this panel, and the one the reference names for
-              it, so it holds the viewport's single fill. The ↗ is the
-              reference's forward-action arrow. */}
-          <Button
-            type="submit"
-            variant="glossy"
-            arrow="↗"
-            disabled={isLoading || !canQuery}
-            aria-busy={isLoading}
-            className="mt-8"
-          >
-            {isLoading ? 'Mapping route…' : 'Build route'}
-          </Button>
-        </form>
+            {/* The one button in this panel, and the one the reference names for
+                it, so it holds the viewport's single fill. The ↗ is the
+                reference's forward-action arrow. */}
+            <Button
+              type="submit"
+              variant="glossy"
+              arrow="↗"
+              disabled={isLoading || !canQuery}
+              aria-busy={isLoading}
+              className="mt-8"
+            >
+              {isLoading ? 'Mapping route…' : 'Build route'}
+            </Button>
+          </form>
+        ) : null}
 
         {error === '' ? null : (
           <div
@@ -487,7 +529,7 @@ export default function RouteMap({
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-8 @xl:grid-cols-4">
               {/* Each value is server data — a skill name, a role id, a count —
                   so all four read as mono metadata under a caption label. */}
               <div className={`border-t ${ruleClass} pt-4`}>
@@ -519,7 +561,7 @@ export default function RouteMap({
             </div>
 
             <div className={SECTION_CLASS}>
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+              <div className="flex flex-col gap-1 @xl:flex-row @xl:items-baseline @xl:justify-between">
                 <p className={sectionHeadingClass}>
                   Metro line · {stations.length} stations
                 </p>
@@ -532,7 +574,7 @@ export default function RouteMap({
 
               <ol
                 aria-label={`Route stations from ${route.from_skill ?? 'start'} to ${route.target_role ?? 'target'}`}
-                className="mt-8 flex flex-col sm:flex-row sm:items-start"
+                className="mt-8 flex flex-col @xl:flex-row @xl:items-start"
               >
                 {stations.map((station, index) => {
                   const isFirst = index === 0
@@ -541,20 +583,20 @@ export default function RouteMap({
                   return (
                     <li
                       key={station.key}
-                      className="relative flex gap-x-4 pb-6 last:pb-0 sm:flex-1 sm:flex-col sm:items-center sm:gap-x-0 sm:pb-0 sm:text-center"
+                      className="relative flex gap-x-4 pb-6 last:pb-0 @xl:flex-1 @xl:flex-col @xl:items-center @xl:gap-x-0 @xl:pb-0 @xl:text-center"
                     >
                       {isFirst ? null : (
                         <span
                           aria-hidden="true"
-                          className={`absolute left-2 top-0 w-px -translate-x-1/2 sm:hidden ${CONNECTOR_CLASS} ${isLast ? 'h-2' : 'inset-y-0'}`}
+                          className={`absolute left-2 top-0 w-px -translate-x-1/2 @xl:hidden ${CONNECTOR_CLASS} ${isLast ? 'h-2' : 'inset-y-0'}`}
                         />
                       )}
 
-                      <div className="relative flex h-4 items-center sm:h-5 sm:w-full sm:justify-center">
+                      <div className="relative flex h-4 items-center @xl:h-5 @xl:w-full @xl:justify-center">
                         {isLast ? null : (
                           <span
                             aria-hidden="true"
-                            className={`absolute left-1/2 top-1/2 hidden h-px w-full -translate-y-1/2 sm:block ${CONNECTOR_CLASS}`}
+                            className={`absolute left-1/2 top-1/2 hidden h-px w-full -translate-y-1/2 @xl:block ${CONNECTOR_CLASS}`}
                           />
                         )}
                         <span
@@ -563,7 +605,7 @@ export default function RouteMap({
                         />
                       </div>
 
-                      <div className="min-w-0 sm:mt-3">
+                      <div className="min-w-0 @xl:mt-3">
                         <p className={STATION_LABEL_CLASS}>
                           {station.skill}
                         </p>
@@ -593,7 +635,7 @@ export default function RouteMap({
                   bridge block.
                 </p>
               ) : (
-                <dl className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                <dl className="mt-4 grid gap-x-8 gap-y-3 @xl:grid-cols-2">
                   {bridgeEntries.map(([label, value]) => (
                     <div
                       key={label}

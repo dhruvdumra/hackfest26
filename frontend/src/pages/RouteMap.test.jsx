@@ -398,4 +398,26 @@ describe('RouteMap', () => {
       screen.getByRole('spinbutton', { name: 'Hours per week' }),
     ).toHaveValue(10)
   })
+
+  it('builds the route on mount and folds the form away in the compact demo mode', async () => {
+    getRouteMock.mockResolvedValue(ROUTE)
+    render(<RouteMap autoRun compact initialFromSkill="API testing" />)
+
+    // No click: the demo step opens on a route, not on an empty form.
+    expect(
+      await screen.findByRole('list', {
+        name: 'Route stations from Manual testing to qa-analyst',
+      }),
+    ).toBeInTheDocument()
+    expect(getRouteMock).toHaveBeenCalledTimes(1)
+    expect(getRouteMock.mock.calls[0][0]).toMatchObject({
+      fromSkill: 'API testing',
+      targetRole: 'qa-analyst',
+      hoursPerWeek: 10,
+    })
+
+    expect(screen.queryByRole('button', { name: 'Build route' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Change the route' }))
+    expect(screen.getByRole('button', { name: 'Build route' })).toBeInTheDocument()
+  })
 })
