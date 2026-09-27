@@ -29,12 +29,12 @@ const BADGE_CLASS = [
  * The two states differed by 0:1 of contrast, so the panel's single most
  * important output was invisible.
  *
- * The tones are the whole palette's chromatic vocabulary: the accent for live
- * and for a pass, amber for a flagged verdict, red for a failure, and an
- * untinted outline for everything that is merely not-applicable. Amber and the
- * accent sit 122° apart, which survives every form of colour-vision
- * deficiency, and no tone is ever used for decoration — each answers exactly
- * one question about state.
+ * The tones are the whole palette's chromatic vocabulary, and since R3 they
+ * are the pitch deck's: teal for live and for a pass, red for a flagged
+ * verdict or a failure, and an untinted outline for everything that is merely
+ * not-applicable. The word in the badge always names the state, so no tone is
+ * the only signal, and no tone is ever used for decoration — each answers
+ * exactly one question about state.
  *
  * Each `dot` is the COLOUR treatment only. The dot's size and shape come from
  * `inlineDotClass`, which the component applies, so a tone never restates the
@@ -46,7 +46,7 @@ const TONES = {
   // The reference's "very subtle glow", which is the one shadow the system
   // permits outside the pill's own bevel.
   accent: { dot: 'bg-pulse-green shadow-pulse', ink: smokeClass },
-  // No glow: a flagged dot is a solid amber mark, not a lamp.
+  // No glow: a flagged dot is a solid red mark, not a lamp.
   flagged: { dot: 'bg-flagged', ink: 'text-flagged' },
   danger: { dot: 'bg-danger', ink: 'text-danger' },
   // The not-applicable state: an outline, carrying no hue at all. Iron rather

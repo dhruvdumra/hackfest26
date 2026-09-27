@@ -1,4 +1,5 @@
-/* ReRoute design tokens — R2 palette.
+/* ReRoute design tokens — R3 palette: the R2 black system with the pitch
+ * deck's accents (see "R3" below).
  *
  * Origin: ReRoute_Style_Reference.md (Hyperstudio "Ditto"), with the colour
  * values re-derived from a WCAG audit of that palette on this project's own
@@ -30,8 +31,8 @@
  * PASS and FLAGGED were both rendered as a Graphite outline dot plus Smoke
  * text, 6.93:1 either way. The bias verdict — the product's entire argument —
  * was visually identical to a clean bill of health. A verdict token now owns
- * that state: FLAGGED takes amber, 122° of hue separation from the emerald
- * PASS, which survives every form of colour-vision deficiency.
+ * that state. (R2 drew it amber against an emerald PASS; R3 keeps the verdict
+ * token and moves both hues onto the deck's red and teal — see below.)
  *
  * Structural note: the R1 `--color-carbon` is retained as an alias of the new
  * surface so the many `bg-carbon` form-control call sites keep working and keep
@@ -62,9 +63,23 @@
   --color-chalk: #f2f4f5;   /* 17.9:1 — primary */
   --color-smoke: #a8b0b8;   /*  9.0:1 — secondary, body copy */
 
-  /* The single chromatic accent, and the only colour an icon may take.
-     Replaces both Compass Gold (3.4:1) and Pulse Green. */
-  --color-compass-gold: #00d992;
+  /* R3 — the deck's accents on the black system. The judges see the pitch
+     deck (navy, amber route line, teal for a pass, red for a problem) a
+     minute before the demo, so the app speaks the same colour language
+     instead of introducing an emerald and an amber FLAGGED of its own.
+     Each value was re-measured on obsidian, carbon and navy:
+
+       teal  #14b8a0   7.9 / 7.4 / 7.0:1 — the deck teal #0fa38f, lifted one
+                       step so it holds on a projector
+       red   #ff6369   6.8 / 6.4 / 6.0:1 — the deck red #e5484d, lifted for
+                       small text on carbon
+       amber #f5a524   9.7 / 9.1 / 8.6:1 — the deck's route line, unchanged
+
+     Teal and red differ in hue and in luminance, and every state they mark
+     also carries a word and a dot shape, so no state rests on colour alone. */
+
+  /* The single chromatic accent, and the only colour an icon may take. */
+  --color-compass-gold: #14b8a0;
   --color-signal-white: #ffffff;
   --color-card-slate: #1a1d20;
 
@@ -73,10 +88,15 @@
      progress along Kavya's route and nothing else. */
   --color-route: #f5a524;
 
+  /* The deck's navy, for the presenter's own chrome (the step bar), so the
+     controls read as a layer above the page rather than part of it. Borders
+     on it use Iron: Graphite sits at 1.18:1 on navy. */
+  --color-navy: #0e1a2b;
+
   /* Semantic. R1 reserved Pulse Green for one live dot and had no colour for
      the FLAGGED verdict, which is why the two states were indistinguishable. */
-  --color-pulse-green: #00d992;      /* live status only */
-  --color-flagged: #ffb020;          /* 10.8:1 — a biased screening model */
+  --color-pulse-green: #14b8a0;      /* live status and a PASS */
+  --color-flagged: #ff6369;          /* 6.8:1 — a biased screening model */
   --color-danger: #f2545b;           /*  5.8:1 — errors */
 
   /* Typography — two faces, both specified by the reference and both now
@@ -98,7 +118,9 @@
   --font-mono: 'Input', 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'Cascadia Mono', monospace;
 
   /* Typography — Scale */
-  --text-caption: 13px;
+  /* 14px, one step up from the reference's 13px: captions and mono meta carry
+     the demo's numbers, and 13px does not survive a projector. */
+  --text-caption: 14px;
   --text-body: 16px;
   --text-heading-xs: 18px;
   --text-subheading: 21px;
@@ -155,7 +177,7 @@
      than as an arbitrary value that could be sprinkled around. */
   --shadow-button: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(0, 0, 0, 0.4);
   /* The badge dot's "very subtle glow", likewise the only other one. */
-  --shadow-pulse: 0 0 4px rgba(152, 255, 56, 0.5);
+  --shadow-pulse: 0 0 4px rgba(20, 184, 160, 0.5);
 }
 
 /* Values the reference defines as plain CSS custom properties. They sit outside

@@ -78,9 +78,9 @@ describe('AgentConsole', () => {
     expect(rail).toHaveLength(PIPELINE_AGENTS.length)
 
     // The tick is an aria-hidden hairline, so it is read by class rather than by
-    // role: the first agent has reported, so its tick is the Chalk one.
+    // role: the first agent has reported, so its tick is the amber route one.
     const skillsTick = rail[0].querySelector('span')
-    expect(skillsTick).toHaveClass('bg-chalk')
+    expect(skillsTick).toHaveClass('bg-route')
     const marketTick = rail[1].querySelector('span')
     expect(marketTick).toHaveClass('bg-graphite')
   })

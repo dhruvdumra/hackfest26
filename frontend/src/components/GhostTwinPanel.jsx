@@ -335,10 +335,9 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
    * costs Kavya six points for an 18-month break", which are not the same
    * message at all.
    *
-   * The verdict now takes the badge's explicit tone: emerald for a pass, amber
-   * for a flag. They are 122° apart, which survives every form of
-   * colour-vision deficiency, and both clear 10:1 on this canvas, so the state
-   * is carried by colour AND by the word AND by the dot's fill — never by one
+   * The verdict now takes the badge's explicit tone: the deck's teal for a
+   * pass, its red for a flag. Both clear 6:1 on this panel, and the state is
+   * carried by colour AND by the word AND by the dot's fill — never by one
    * channel alone. */
   const verdictLabel = isPass ? 'PASS' : 'FLAGGED'
   const verdictTone = isPass ? 'accent' : 'flagged'
@@ -720,8 +719,8 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
             >
               <div>
                 {/* The verdict takes the badge's explicit tone rather than its
-                    liveness flag, so a FLAGGED result is amber and a PASS is
-                    emerald. The sentence below carries the meaning, so the
+                    liveness flag, so a FLAGGED result is red and a PASS is
+                    teal. The sentence below carries the meaning, so the
                     badge only has to name the state — but it now also *shows*
                     it, which is the whole point of the audit. */}
                 <StatusBadge label={verdictLabel} tone={verdictTone} />

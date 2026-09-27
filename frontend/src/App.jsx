@@ -128,6 +128,7 @@ function NavLinks() {
  *   children?: import('react').ReactNode,
  *   className?: string,
  *   id?: string,
+ *   step?: string,
  *   eyebrow?: string,
  *   title?: string,
  *   description?: string,
@@ -137,6 +138,7 @@ function Section({
   children,
   className = '',
   id,
+  step,
   eyebrow,
   title,
   description,
@@ -150,7 +152,14 @@ function Section({
       {eyebrow === undefined && title === undefined ? null : (
         <header className="mb-16">
           {eyebrow === undefined ? null : (
-            <p className={`${metaClass} ${smokeClass} uppercase`}>{eyebrow}</p>
+            <p className={`${metaClass} ${smokeClass} uppercase`}>
+              {/* A demo step's number takes the deck's amber route colour, so
+                  the five stops read as one line down the page. */}
+              {step === undefined ? null : (
+                <span className="text-route">{`Step ${step} · `}</span>
+              )}
+              {eyebrow}
+            </p>
           )}
           {title === undefined ? null : (
             <h2
@@ -430,6 +439,7 @@ export default function App() {
             <Section
               key={moment.id}
               id={moment.id}
+              step={moment.number}
               eyebrow={moment.eyebrow}
               title={moment.title}
               description={moment.description}

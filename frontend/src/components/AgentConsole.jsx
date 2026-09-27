@@ -73,8 +73,10 @@ const CHALK_META_CLASS = `${metaClass} text-chalk`
 const RAIL_CLASS = 'mt-6 grid grid-cols-2 gap-y-4 sm:grid-cols-3 lg:grid-cols-6'
 const RAIL_ITEM_CLASS = 'flex min-w-0 flex-col gap-2'
 const RAIL_TICK_CLASS = 'h-px w-full bg-graphite'
-const RAIL_TICK_ACTIVE_CLASS = 'h-px w-full bg-chalk'
-const RAIL_LABEL_CLASS = `truncate text-[11px] uppercase ${metaClass} ${smokeClass}`
+// A finished agent's tick is the deck's amber route line: the rail fills the
+// way Kavya's route does on the slides.
+const RAIL_TICK_ACTIVE_CLASS = 'h-px w-full bg-route'
+const RAIL_LABEL_CLASS = `truncate text-xs uppercase ${metaClass} ${smokeClass}`
 
 // The log grows to its own content instead of claiming a fixed height. A
 // `h-64` box with the rows bottom-aligned was technically stable, but at event 4
@@ -87,9 +89,10 @@ const LOG_CLASS = 'mt-6 flex flex-col overflow-y-auto border-t border-graphite'
 const LOG_LIST_CLASS = 'mt-3 flex flex-col gap-2.5'
 
 const ROW_CLASS = 'flex items-baseline gap-3'
-const ROW_TIME_CLASS = `shrink-0 text-[11px] tabular-nums ${metaClass} ${smokeClass}`
-const ROW_AGENT_CLASS = `shrink-0 text-[11px] uppercase ${metaClass} text-chalk`
-const ROW_MESSAGE_CLASS = 'min-w-0 flex-1 truncate text-[11px] leading-body text-smoke'
+// 12px rather than 11px: this log is what the room reads while the run plays.
+const ROW_TIME_CLASS = `shrink-0 text-xs tabular-nums ${metaClass} ${smokeClass}`
+const ROW_AGENT_CLASS = `shrink-0 text-xs uppercase ${metaClass} text-chalk`
+const ROW_MESSAGE_CLASS = 'min-w-0 flex-1 truncate text-xs leading-body text-smoke'
 const ROW_DOT_CLASS = `${INLINE_DOT_CLASS} self-center`
 
 // Nothing has run yet: one muted sentence. No dashed placeholder, no fake rows

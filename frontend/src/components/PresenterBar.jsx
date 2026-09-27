@@ -13,7 +13,7 @@ import { Button } from './Button.jsx'
  * The stops read as one route line — the deck's metro motif — with the line
  * behind the presenter filled and the line ahead left as structure. */
 
-const BAR_CLASS = 'fixed inset-x-0 bottom-0 z-40 border-t border-graphite bg-obsidian'
+const BAR_CLASS = 'fixed inset-x-0 bottom-0 z-40 border-t border-iron bg-navy'
 const STOP_DOT_CLASS = 'h-2.5 w-2.5 shrink-0 rounded-full'
 
 /** @type {Record<'done' | 'current' | 'ahead', { dot: string, label: string }>} */

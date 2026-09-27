@@ -151,7 +151,6 @@ export default function ConsentCard({
         </div>
         <StatusBadge
           label={receipt === null ? (requested ? 'waiting for Kavya' : 'not asked') : isLocalOnly ? 'simulated · not saved' : 'local'}
-          tone={receipt === null && requested ? 'flagged' : undefined}
           live={false}
         />
       </div>
