@@ -2,9 +2,11 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const runMatchMock = vi.fn()
+const getRouteMock = vi.fn()
 
 vi.mock('../api.js', () => ({
   runMatch: (payload, options) => runMatchMock(payload, options),
+  getRoute: (query, options) => getRouteMock(query, options),
 }))
 
 const { default: MatchPanel } = await import('./MatchPanel.jsx')
@@ -62,6 +64,7 @@ function response(matches) {
 describe('MatchPanel', () => {
   beforeEach(() => {
     runMatchMock.mockReset()
+    getRouteMock.mockReset()
     runMatchMock.mockResolvedValue(response([...ALLOWED, ...BLOCKED]))
   })
 
@@ -151,5 +154,71 @@ describe('MatchPanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'ReRoute could not reach the backend',
     )
+  })
+
+  it('answers "why not me?" for a lower-ranked role with the score gap and the shortest route', async () => {
+    getRouteMock.mockResolvedValue({
+      legs: [
+        { skill: 'Manual testing', hours: 0 },
+        { skill: 'SQL data validation', hours: 25 },
+      ],
+      total_hours: 25,
+      weeks: 2.5,
+      source: 'simulated',
+    })
+    render(<MatchPanel />)
+
+    const row = /** @type {HTMLElement} */ (
+      (await screen.findByText('Data Quality Analyst')).closest('tr')
+    )
+    // The top match has nothing to explain, so it offers no button.
+    const topRow = /** @type {HTMLElement} */ (screen.getByText('QA Analyst').closest('tr'))
+    expect(within(topRow).queryByRole('button', { name: 'Why not me?' })).toBeNull()
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Why not me?' }))
+
+    expect(getRouteMock).toHaveBeenCalledWith(
+      { fromSkill: 'Manual testing', targetRole: 'data-quality-analyst', hoursPerWeek: 10 },
+      expect.objectContaining({ baseUrl: '' }),
+    )
+    expect(await screen.findByText(/Your match is 50 against 67 for the top role/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        'Shortest route to qualify: 25 hours, about 2.5 weeks at 10 hours a week.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Route to Data Quality Analyst' })).toHaveTextContent(
+      'SQL data validation',
+    )
+    expect(within(row).getByRole('button', { name: 'Hide reason' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+  })
+
+  it('tells a blocked role it was held back to protect her pay, not for skills', async () => {
+    render(<MatchPanel />)
+
+    const row = /** @type {HTMLElement} */ (
+      (await screen.findByText('Manual Testing Technician')).closest('tr')
+    )
+    fireEvent.click(within(row).getByRole('button', { name: 'Why not me?' }))
+
+    expect(screen.getByText('You qualify. It is blocked to protect your pay.')).toBeInTheDocument()
+    expect(getRouteMock).not.toHaveBeenCalled()
+  })
+
+  it('says plainly when the skills graph has no route to a role', async () => {
+    getRouteMock.mockRejectedValue(Object.assign(new Error('unknown target_role'), { status: 422 }))
+    render(<MatchPanel />)
+
+    const row = /** @type {HTMLElement} */ (
+      (await screen.findByText('Mobile QA Engineer')).closest('tr')
+    )
+    fireEvent.click(within(row).getByRole('button', { name: 'Why not me?' }))
+
+    expect(
+      await screen.findByText(/The demo skills graph has no route to this role yet/),
+    ).toBeInTheDocument()
   })
 })

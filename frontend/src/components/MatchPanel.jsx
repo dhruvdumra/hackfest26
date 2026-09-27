@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { runMatch } from '../api.js'
 import { isAbortError } from '../lib/guards.js'
 import {
@@ -17,6 +17,7 @@ import {
 import StatusBadge from './StatusBadge.jsx'
 import Switch from './Switch.jsx'
 import { Button } from './Button.jsx'
+import WhyNotMe from './WhyNotMe.jsx'
 
 /* Inclusive Matching, with the Wage-Scar Guardrail on screen.
  *
@@ -66,17 +67,17 @@ function getErrorMessage(error) {
  *   baseUrl?: string,
  *   sessionId?: string | null,
  *   passportId?: string | null,
- *   renderWhyNotMe?: (match: Record<string, any>) => import('react').ReactNode,
  * }} props
  */
 export default function MatchPanel({
   baseUrl = '',
   sessionId = null,
   passportId = null,
-  renderWhyNotMe,
 }) {
   const [acceptPayCut, setAcceptPayCut] = useState(false)
   const [showAll, setShowAll] = useState(false)
+  // One explanation open at a time, keyed by role, so the table stays a table.
+  const [openRoleId, setOpenRoleId] = useState(/** @type {string | null} */ (null))
   // A session only matches its own passport once the skills agent has written
   // one; until then the server's baseline stands in.
   const usesSession = Boolean(sessionId) && Boolean(passportId)
@@ -126,6 +127,7 @@ export default function MatchPanel({
   const hiddenCount = allowed.length - visibleAllowed.length
   const rows = [...visibleAllowed, ...blocked]
   const threshold = response?.guardrail_threshold_pct ?? 15
+  const topMatch = allowed[0] ?? null
 
   return (
     <section
@@ -202,40 +204,67 @@ export default function MatchPanel({
               <tbody className="divide-y divide-graphite">
                 {rows.map((match) => {
                   const isBlocked = match.blocked_by_guardrail === true
+                  const roleId = String(match.role_id ?? match.role)
+                  // Every role but the top match gets an answer to "why not
+                  // me?" — the deck's promise for each non-match.
+                  const canExplain = isBlocked || match !== topMatch
+                  const isOpen = canExplain && openRoleId === roleId
+                  const explanationId = `why-not-me-${roleId}`
 
                   return (
-                    <tr key={match.role_id ?? match.role} data-blocked={isBlocked || undefined}>
-                      <th scope="row" className="py-4 pr-4 font-normal">
-                        <span className={`block ${inlineLabelClass}`}>
-                          {match.title ?? match.role}
-                        </span>
-                        <span className={`mt-1 block ${metaClass} ${smokeClass}`}>
-                          {match.role_id ?? match.role}
-                        </span>
-                      </th>
-                      <td className={`${CELL_CLASS} ${chalkClass}`}>{formatScore(match.score)}</td>
-                      <td className={`${CELL_CLASS} ${isBlocked ? 'text-danger' : chalkClass}`}>
-                        {formatPercent(match.pay_delta_pct)}
-                      </td>
-                      <td className={`${CELL_CLASS} ${smokeClass}`}>
-                        {typeof match.commute_km === 'number' ? `${match.commute_km} km` : '—'}
-                      </td>
-                      <td className="py-4 pl-4 align-top">
-                        {isBlocked ? (
-                          <>
-                            <StatusBadge tone="danger" label="Blocked" />
-                            <p className={`mt-2 max-w-[18rem] ${bodyClass} text-sm ${smokeClass}`}>
-                              {match.guardrail_reason ?? 'Blocked by the wage-scar guardrail.'}
-                            </p>
-                          </>
-                        ) : (
-                          <StatusBadge tone="muted" label="Allowed" />
-                        )}
-                        {renderWhyNotMe === undefined ? null : (
-                          <div className="mt-3">{renderWhyNotMe(match)}</div>
-                        )}
-                      </td>
-                    </tr>
+                    <Fragment key={roleId}>
+                      <tr data-blocked={isBlocked || undefined}>
+                        <th scope="row" className="py-4 pr-4 font-normal">
+                          <span className={`block ${inlineLabelClass}`}>
+                            {match.title ?? match.role}
+                          </span>
+                          <span className={`mt-1 block ${metaClass} ${smokeClass}`}>
+                            {roleId}
+                          </span>
+                        </th>
+                        <td className={`${CELL_CLASS} ${chalkClass}`}>{formatScore(match.score)}</td>
+                        <td className={`${CELL_CLASS} ${isBlocked ? 'text-danger' : chalkClass}`}>
+                          {formatPercent(match.pay_delta_pct)}
+                        </td>
+                        <td className={`${CELL_CLASS} ${smokeClass}`}>
+                          {typeof match.commute_km === 'number' ? `${match.commute_km} km` : '—'}
+                        </td>
+                        <td className="py-4 pl-4 align-top">
+                          {isBlocked ? (
+                            <>
+                              <StatusBadge tone="danger" label="Blocked" />
+                              <p className={`mt-2 max-w-[18rem] ${bodyClass} text-sm ${smokeClass}`}>
+                                {match.guardrail_reason ?? 'Blocked by the wage-scar guardrail.'}
+                              </p>
+                            </>
+                          ) : (
+                            <StatusBadge tone="muted" label={match === topMatch ? 'Top match' : 'Allowed'} />
+                          )}
+                          {canExplain ? (
+                            <button
+                              type="button"
+                              aria-expanded={isOpen}
+                              aria-controls={explanationId}
+                              onClick={() => setOpenRoleId(isOpen ? null : roleId)}
+                              className={`mt-3 block underline decoration-iron underline-offset-4 hover:text-chalk focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ash ${metaClass} ${smokeClass}`}
+                            >
+                              {isOpen ? 'Hide reason' : 'Why not me?'}
+                            </button>
+                          ) : null}
+                        </td>
+                      </tr>
+                      {isOpen ? (
+                        <tr id={explanationId}>
+                          <td colSpan={5} className="pr-4">
+                            <WhyNotMe
+                              baseUrl={baseUrl}
+                              match={match}
+                              topScore={topMatch?.score ?? null}
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   )
                 })}
               </tbody>
