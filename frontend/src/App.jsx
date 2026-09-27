@@ -3,6 +3,7 @@ import AgentConsole from './components/AgentConsole.jsx'
 import GhostTwinPanel from './components/GhostTwinPanel.jsx'
 import Logo from './components/Logo.jsx'
 import Manifesto from './components/Manifesto.jsx'
+import MatchPanel from './components/MatchPanel.jsx'
 import PipelineAgentGrid from './components/PipelineAgentGrid.jsx'
 import PresenterBar from './components/PresenterBar.jsx'
 import Reveal from './components/Reveal.jsx'
@@ -271,6 +272,11 @@ export default function App() {
       <div className="space-y-24">
         <DisplacementRadarPanel baseUrl={backendBaseUrl} />
         <RouteMap baseUrl={backendBaseUrl} />
+        <MatchPanel
+          baseUrl={backendBaseUrl}
+          sessionId={sessionId}
+          passportId={session?.passport?.passport_id ?? null}
+        />
       </div>
     ),
     audit: <GhostTwinPanel baseUrl={backendBaseUrl} />,

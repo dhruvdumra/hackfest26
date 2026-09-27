@@ -485,6 +485,12 @@ async def _inclusive_matching(state: OrchestrationState) -> OrchestrationState:
         )
         matches = _match_results(response)
         blocked = sum(1 for match in matches if match.blocked_by_guardrail)
+        # The session keeps the top MAX_MATCHES, but the guardrail sorts blocked
+        # roles below every allowed one, so counting only the kept rows always
+        # reported "0 blocked" while the full ranking a client reads from
+        # POST /match showed the blocked roles. The event reports the ranking.
+        ranked_total = len(response.matches)
+        blocked_total = sum(1 for match in response.matches if match.blocked_by_guardrail)
         await _update_session(
             store,
             session_id,
@@ -512,12 +518,17 @@ async def _inclusive_matching(state: OrchestrationState) -> OrchestrationState:
         await emitter.emit(
             agent="INCLUSIVE MATCHING",
             status="done",
-            message=f"{len(matches)} ranked matches ready · {blocked} blocked by the guardrail",
+            message=(
+                f"{ranked_total} roles ranked · {blocked_total} blocked by the "
+                f"wage-scar guardrail · top {len(matches)} kept"
+            ),
             data={
                 "phase": "inclusive_matching",
                 "source": response.source,
                 "match_count": len(matches),
                 "blocked_count": blocked,
+                "ranked_total": ranked_total,
+                "blocked_total": blocked_total,
                 "matches": [
                     {
                         "role": match.role,

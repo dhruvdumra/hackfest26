@@ -265,6 +265,29 @@ def test_result_events_repeat_their_own_source_label(happy_path: Outcome) -> Non
             assert data_field(event, "source") == event.source
 
 
+def test_matching_event_counts_the_whole_ranking(happy_path: Outcome) -> None:
+    """The session keeps the top three, but the event must not hide the guardrail.
+
+    Blocked roles sort below every allowed one, so counting only the kept rows
+    reported "0 blocked" while POST /match showed the blocked roles.
+    """
+    done = [
+        event
+        for event in happy_path.emitted
+        if event.agent == "INCLUSIVE MATCHING" and event.status == "done"
+    ]
+    assert len(done) == 1
+    ranked_total = data_field(done[0], "ranked_total")
+    blocked_total = data_field(done[0], "blocked_total")
+    assert isinstance(ranked_total, int)
+    assert isinstance(blocked_total, int)
+    assert ranked_total > len(happy_path.session.matches)
+    assert blocked_total > 0
+    assert done[0].message.startswith(
+        f"{ranked_total} roles ranked · {blocked_total} blocked by the wage-scar guardrail"
+    )
+
+
 def test_terminal_node_requests_consent_and_completes(happy_path: Outcome) -> None:
     events = happy_path.emitted
     statuses = [event.status for event in events]

@@ -69,7 +69,7 @@ export const MOCK_AGENT_EVENTS = [
   {
     agent: 'INCLUSIVE MATCHING',
     status: 'done',
-    message: '3 ranked matches ready · 0 blocked by the guardrail',
+    message: '15 roles ranked · 2 blocked by the wage-scar guardrail · top 3 kept',
     timestamp: '00:10',
     sequence: 9,
   },
