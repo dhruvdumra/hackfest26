@@ -21,7 +21,7 @@ export const DEMO_MOMENTS = [
     eyebrow: 'Proof of skill',
     title: 'Real work beats a résumé.',
     description:
-      'A claim becomes a credential only when the work is shown. The server scores the sample and decides whether the credential lands on her passport.',
+      'A claim becomes a credential only when the work is shown. Kavya tested loan software for years, so her proof is a bug hunt on a loan calculator, graded on the bugs she can reproduce.',
   },
   {
     id: 'route',

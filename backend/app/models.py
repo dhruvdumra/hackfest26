@@ -95,7 +95,13 @@ class WorkSampleRequest(APIModel):
 class WorkSampleResponse(APIModel):
     score: int = Field(ge=0, le=100)
     credential_issued: bool
-    source: Literal["live", "simulated"]
+    # ``local`` is the EMI bug hunt: graded in-process against the planted bugs.
+    source: Literal["live", "simulated", "local"]
+    # Set only for the EMI bug hunt, so the worker sees what she proved.
+    credential: str | None = None
+    bugs_found: list[str] | None = None
+    bugs_total: int | None = Field(default=None, ge=0)
+    false_reports: int | None = Field(default=None, ge=0)
 
 
 class SkillPassport(APIModel):

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import AgentConsole from './components/AgentConsole.jsx'
 import ConsentCard from './components/ConsentCard.jsx'
+import EmiBugHunt from './components/EmiBugHunt.jsx'
 import GhostTwinPanel from './components/GhostTwinPanel.jsx'
 import HiringDecision from './components/HiringDecision.jsx'
 import Logo from './components/Logo.jsx'
@@ -272,12 +273,17 @@ export default function App() {
       </>
     ),
     proof: (
-      <WorkSamplePanel
-        baseUrl={backendBaseUrl}
-        sessionId={sessionId}
-        skills={skills}
-        onScored={refreshSession}
-      />
+      <div className="space-y-24">
+        <EmiBugHunt baseUrl={backendBaseUrl} sessionId={sessionId} onScored={refreshSession} />
+        <WorkSamplePanel
+          baseUrl={backendBaseUrl}
+          sessionId={sessionId}
+          skills={skills}
+          onScored={refreshSession}
+          title="Prove another skill"
+          description="For a claim the bug hunt does not cover, paste the evidence. The server scores it and decides whether a credential is issued."
+        />
+      </div>
     ),
     route: (
       <div className="space-y-24">
