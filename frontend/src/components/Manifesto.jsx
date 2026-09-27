@@ -17,6 +17,7 @@ const DEFAULT_BODY =
 // to the button's own `text-transform`, so the rendered text matches the
 // reference either way.
 const DEFAULT_CTA = 'READ THE TWO-KEY RULE'
+const DEFAULT_CTA_ARROW = '↓'
 
 // Aeonik 16px in Smoke on 24px of leading, which is the one place the reference
 // deliberately overrides the type scale's body leading. The body is a short
@@ -46,6 +47,7 @@ const CTA_CLASS = 'mt-10'
  *   title?: string,
  *   body?: string,
  *   ctaLabel?: string,
+ *   ctaArrow?: string,
  *   onCtaClick?: () => void,
  *   className?: string,
  * }} props
@@ -55,6 +57,7 @@ export default function Manifesto({
   title = DEFAULT_TITLE,
   body = DEFAULT_BODY,
   ctaLabel = DEFAULT_CTA,
+  ctaArrow = DEFAULT_CTA_ARROW,
   onCtaClick,
   className = '',
 }) {
@@ -66,9 +69,10 @@ export default function Manifesto({
         <p className={`${metaClass} ${smokeClass} uppercase`}>{eyebrow}</p>
         <h2 className={`mt-3 ${headingSmClass} ${chalkClass}`}>{title}</h2>
         <p className={BODY_CLASS}>{body}</p>
-        {/* Ghost Outline, and a down arrow: the target is further down the page,
-            which is the reference's rule for the arrow glyph. */}
-        <Button variant="ghost" arrow="↓" className={CTA_CLASS} onClick={onCtaClick}>
+        {/* Ghost Outline, with the arrow pointing at the target: the reference's
+            rule is "↓" for a reveal further down, so a caller whose target
+            sits above the block passes "↑". */}
+        <Button variant="ghost" arrow={ctaArrow} className={CTA_CLASS} onClick={onCtaClick}>
           {ctaLabel}
         </Button>
       </div>

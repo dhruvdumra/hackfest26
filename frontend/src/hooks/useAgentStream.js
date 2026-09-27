@@ -48,9 +48,19 @@ export function createMockAgentAdapter(options = {}) {
 
 const defaultMockAdapter = createMockAgentAdapter()
 
+/**
+ * Subscribe to an agent event stream.
+ *
+ * `enabled` gates the subscription itself. The page used to subscribe on mount,
+ * so the recorded demo run started playing before anyone pressed Run pipeline
+ * and the presenter lost the moment the judges were meant to see. A disabled
+ * stream reports no events and holds no timer; the presenter enables it, and a
+ * new `sessionId` replays the run from the start.
+ */
 export function useAgentStream({
   adapter = defaultMockAdapter,
   sessionId = 'demo-session',
+  enabled = true,
 } = {}) {
   const source = getAgentStreamSource(adapter)
   const streamId = `${source}:${sessionId}`
@@ -65,6 +75,10 @@ export function useAgentStream({
   const stateIsCurrent = streamState.streamIdentity === streamIdentity
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined
+    }
+
     let active = true
     const unsubscribe = adapter.subscribe((event) => {
       if (!active) {
@@ -104,10 +118,10 @@ export function useAgentStream({
       active = false
       unsubscribe()
     }
-  }, [adapter, sessionId, streamId, streamIdentity])
+  }, [adapter, enabled, sessionId, streamId, streamIdentity])
 
   return {
-    events: stateIsCurrent ? streamState.events : EMPTY_EVENTS,
+    events: enabled && stateIsCurrent ? streamState.events : EMPTY_EVENTS,
     source,
   }
 }

@@ -9,11 +9,9 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getSessionMock = vi.fn()
-const scoreWorkSampleMock = vi.fn()
 
 vi.mock('../api.js', () => ({
   getSession: (id) => getSessionMock(id),
-  scoreWorkSample: (payload) => scoreWorkSampleMock(payload),
 }))
 
 const { default: WorkerApp, KAVYA_TRANSCRIPT } = await import('./WorkerApp.jsx')
@@ -80,13 +78,7 @@ function renderApp(properties = {}) {
 describe('WorkerApp', () => {
   beforeEach(() => {
     getSessionMock.mockReset()
-    scoreWorkSampleMock.mockReset()
     getSessionMock.mockResolvedValue(SESSION_WITHOUT_PASSPORT)
-    scoreWorkSampleMock.mockResolvedValue({
-      score: 88,
-      credential_issued: true,
-      source: 'simulated',
-    })
   })
 
   afterEach(() => {
@@ -293,84 +285,59 @@ describe('WorkerApp', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.getByText('source pending')).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'A skill is needed before a work sample can be scored. The passport has not landed yet.',
-      ),
-    ).toBeInTheDocument()
   })
 
-  it('scores the picked work sample and renders the score, credential and source', async () => {
+  it('reports each new session snapshot to the parent', async () => {
     getSessionMock.mockResolvedValue(SESSION_WITH_PASSPORT)
-    renderApp({ sessionId: 'session-1' })
+    const onSessionChange = vi.fn()
+    renderApp({ sessionId: 'session-1', onSessionChange })
 
     await screen.findByRole('list', { name: 'Recovered skills' })
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Skill to prove' }), {
-      target: { value: 'Test automation' },
-    })
-    fireEvent.change(
-      screen.getByRole('textbox', { name: 'Evidence submission' }),
-      { target: { value: 'A Playwright suite that runs on every pull request.' } },
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Score work sample' }))
-
-    await waitFor(() => expect(scoreWorkSampleMock).toHaveBeenCalledTimes(1))
-    expect(scoreWorkSampleMock).toHaveBeenCalledWith({
-      skill_id: 'Test automation',
-      submission: 'A Playwright suite that runs on every pull request.',
-      session_id: 'session-1',
-    })
-
-    expect(await screen.findByText('88 out of 100')).toBeInTheDocument()
-    expect(
-      screen.getByText('Credential issued and recorded on the passport.'),
-    ).toBeInTheDocument()
-    expect(screen.getAllByText('simulated')).toHaveLength(2)
+    // The later demo steps read this snapshot, so it is handed up rather than
+    // polled a second time by each of them.
+    expect(onSessionChange).toHaveBeenLastCalledWith(SESSION_WITH_PASSPORT)
   })
 
-  it('reports a rejected work sample without a credential', async () => {
-    scoreWorkSampleMock.mockResolvedValue({
-      score: 42,
-      credential_issued: false,
-      source: 'live',
-    })
+  it('drops the previous run and polls the new session when a second run starts', async () => {
     getSessionMock.mockResolvedValue(SESSION_WITH_PASSPORT)
-    renderApp({ sessionId: 'session-1' })
-
-    await screen.findByRole('list', { name: 'Recovered skills' })
-
-    fireEvent.change(
-      screen.getByRole('textbox', { name: 'Evidence submission' }),
-      { target: { value: 'Notes from a manual pass only.' } },
+    const { rerender } = render(
+      <WorkerApp sessionId="session-1" onSessionStart={vi.fn()} />,
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Score work sample' }))
 
-    expect(await screen.findByText('42 out of 100')).toBeInTheDocument()
-    expect(
-      screen.getByText('No credential issued. The score is below the server threshold.'),
-    ).toBeInTheDocument()
-    expect(screen.getByText('live')).toBeInTheDocument()
+    expect(await screen.findByText('passport-session-1')).toBeInTheDocument()
+
+    getSessionMock.mockResolvedValue({
+      ...SESSION_WITH_PASSPORT,
+      session_id: 'session-2',
+      passport: { ...PASSPORT, passport_id: 'passport-session-2' },
+    })
+    rerender(<WorkerApp sessionId="session-2" onSessionStart={vi.fn()} />)
+
+    expect(await screen.findByText('passport-session-2')).toBeInTheDocument()
+    expect(getSessionMock).toHaveBeenCalledWith('session-2')
   })
 
-  it('renders the ApiError message when the work sample request fails', async () => {
-    scoreWorkSampleMock.mockRejectedValue(
-      new ApiError('Session has no skill passport yet', 409),
-    )
+  it('re-reads the session once when the refresh signal changes', async () => {
     getSessionMock.mockResolvedValue(SESSION_WITH_PASSPORT)
-    renderApp({ sessionId: 'session-1' })
+    const { rerender } = render(
+      <WorkerApp sessionId="session-1" onSessionStart={vi.fn()} refreshSignal={0} />,
+    )
 
     await screen.findByRole('list', { name: 'Recovered skills' })
+    const callsBefore = getSessionMock.mock.calls.length
 
-    fireEvent.change(
-      screen.getByRole('textbox', { name: 'Evidence submission' }),
-      { target: { value: 'Anything at all.' } },
+    getSessionMock.mockResolvedValue({
+      ...SESSION_WITH_PASSPORT,
+      version: 4,
+      passport: { ...PASSPORT, credentials: ['Manual testing', 'Defect reproduction'] },
+    })
+    rerender(
+      <WorkerApp sessionId="session-1" onSessionStart={vi.fn()} refreshSignal={1} />,
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Score work sample' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Session has no skill passport yet',
-    )
+    expect(await screen.findByText('Defect reproduction')).toBeInTheDocument()
+    expect(getSessionMock.mock.calls.length).toBe(callsBefore + 1)
   })
 
   it('renders the ApiError message when the session poll fails', async () => {

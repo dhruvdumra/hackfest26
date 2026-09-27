@@ -154,6 +154,38 @@ describe('useAgentStream', () => {
     )
   })
 
+  it('holds the stream until it is enabled, then replays it from the start', () => {
+    const adapter = createMockAgentAdapter({
+      events: MOCK_AGENT_EVENTS.slice(0, 2),
+      intervalMs: 100,
+    })
+    const subscribe = vi.spyOn(adapter, 'subscribe')
+    const { result, rerender } = renderHook(
+      ({ enabled, sessionId }) => useAgentStream({ adapter, enabled, sessionId }),
+      { initialProps: { enabled: false, sessionId: 'demo-0' } },
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(subscribe).not.toHaveBeenCalled()
+    expect(result.current.events).toEqual([])
+
+    rerender({ enabled: true, sessionId: 'demo-1' })
+    act(() => {
+      vi.advanceTimersByTime(100)
+    })
+    expect(result.current.events).toHaveLength(2)
+
+    // A second run is a new session id, so the log clears and replays.
+    rerender({ enabled: true, sessionId: 'demo-2' })
+    expect(result.current.events).toEqual([])
+    act(() => {
+      vi.advanceTimersByTime(0)
+    })
+    expect(result.current.events).toHaveLength(1)
+  })
+
   it('unsubscribes from the stream adapter on unmount', () => {
     const unsubscribe = vi.fn()
     const adapter = createAgentStreamAdapter({

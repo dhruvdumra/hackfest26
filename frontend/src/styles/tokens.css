@@ -68,6 +68,11 @@
   --color-signal-white: #ffffff;
   --color-card-slate: #1a1d20;
 
+  /* The route line — the pitch deck's amber metro line, carried into the app
+     so the demo reads as the same product the judges just saw. It marks
+     progress along Kavya's route and nothing else. */
+  --color-route: #f5a524;
+
   /* Semantic. R1 reserved Pulse Green for one live dot and had no colour for
      the FLAGGED verdict, which is why the two states were indistinguishable. */
   --color-pulse-green: #00d992;      /* live status only */

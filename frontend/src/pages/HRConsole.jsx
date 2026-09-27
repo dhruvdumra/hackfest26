@@ -332,6 +332,7 @@ function RewriteBlock({
   className = '',
   onJobPostChange,
   onSubmit,
+  renderDecision,
 }) {
   const hiddenTalentCount = rewrite ? asCount(rewrite.hidden_talent_count) : null
   const removedCriteria = rewrite ? asList(rewrite.removed_criteria) : []
@@ -545,6 +546,7 @@ function RewriteBlock({
               disclaimer={rewrite.disclaimer}
               scope="Job post rewrite"
             />
+            {renderDecision?.(rewrite) ?? null}
           </div>
         )}
       </div>
@@ -552,110 +554,137 @@ function RewriteBlock({
   )
 }
 
-export default function HRConsole({ baseUrl = '' }) {
+/**
+ * Keep the in-flight request so a newer submit cancels the older one. Without
+ * this, two quick submits can resolve out of order and the stale response wins.
+ * React StrictMode remounts effects in development, so this is also what stops
+ * the mount fetch from being issued twice.
+ *
+ * @param {(signal: AbortSignal, ...args: any[]) => Promise<unknown>} request
+ * @param {(error: unknown) => string} readError
+ */
+function useLatestRequest(request, readError) {
+  const [result, setResult] = useState(/** @type {any} */ (EMPTY_RESULT))
+  const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const requestRef = useRef(/** @type {AbortController | null} */ (null))
+
+  useEffect(() => () => requestRef.current?.abort(), [])
+
+  async function load(...args) {
+    requestRef.current?.abort()
+
+    const controller = new AbortController()
+    requestRef.current = controller
+    setIsLoading(true)
+    setError('')
+    setResult(EMPTY_RESULT)
+
+    try {
+      const response = await request(controller.signal, ...args)
+
+      if (requestRef.current === controller) {
+        setResult(response)
+      }
+    } catch (requestError) {
+      if (requestRef.current === controller) {
+        setError(readError(requestError))
+      }
+    } finally {
+      if (requestRef.current === controller) {
+        setIsLoading(false)
+      }
+    }
+  }
+
+  return { result, error, isLoading, load }
+}
+
+/**
+ * The displacement radar on its own. It used to be reachable only inside the
+ * employer console, but it answers a worker's question — is my role going
+ * away, and is the next one growing — so the demo shows it in the route step.
+ */
+export function DisplacementRadarPanel({ baseUrl = '', className = '' }) {
   const [role, setRole] = useState(DEFAULT_RADAR_ROLE)
   const [city, setCity] = useState(DEFAULT_RADAR_CITY)
-  const [jobPostId, setJobPostId] = useState(DEFAULT_JOB_POST_ID)
-  const [radar, setRadar] = useState(EMPTY_RESULT)
-  const [radarError, setRadarError] = useState('')
-  const [isRadarLoading, setIsRadarLoading] = useState(true)
-  const [rewrite, setRewrite] = useState(EMPTY_RESULT)
-  const [rewriteError, setRewriteError] = useState('')
-  const [isRewriteLoading, setIsRewriteLoading] = useState(true)
-
-  // Each panel keeps the in-flight request so a newer submit cancels the older
-  // one. Without this, two quick submits can resolve out of order and the stale
-  // response wins. React StrictMode remounts these effects in development, so
-  // this is also what stops the mount fetch from being issued twice.
-  const radarRequestRef = useRef(/** @type {AbortController | null} */ (null))
-  const rewriteRequestRef = useRef(/** @type {AbortController | null} */ (null))
-
-  useEffect(
-    () => () => {
-      radarRequestRef.current?.abort()
-      rewriteRequestRef.current?.abort()
-    },
-    [],
+  const radar = useLatestRequest(
+    (signal, nextRole, nextCity) =>
+      getDisplacementRadar({ role: nextRole, city: nextCity }, { baseUrl, signal }),
+    readRadarError,
   )
 
   useEffect(() => {
-    void loadRadar(DEFAULT_RADAR_ROLE, DEFAULT_RADAR_CITY)
+    void radar.load(DEFAULT_RADAR_ROLE, DEFAULT_RADAR_CITY)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount fetch only
   }, [])
+
+  function handleSubmit(event) {
+    event.preventDefault()
+    void radar.load(role.trim() || DEFAULT_RADAR_ROLE, city.trim() || DEFAULT_RADAR_CITY)
+  }
+
+  return (
+    <RadarBlock
+      role={role}
+      city={city}
+      radar={radar.result}
+      error={radar.error}
+      isLoading={radar.isLoading}
+      className={className}
+      onRoleChange={(event) => setRole(event.target.value)}
+      onCityChange={(event) => setCity(event.target.value)}
+      onSubmit={handleSubmit}
+    />
+  )
+}
+
+/**
+ * The job-post rewrite on its own, for the Two-Key step: the employer's side of
+ * the same run, where a hiring manager holds the second key.
+ *
+ * `renderDecision` receives the loaded rewrite so a human sign-off can sit
+ * under the before/after text it is signing off.
+ *
+ * @param {{
+ *   baseUrl?: string,
+ *   className?: string,
+ *   renderDecision?: (rewrite: Record<string, unknown>) => import('react').ReactNode,
+ * }} props
+ */
+export function EmployerRewritePanel({ baseUrl = '', className = '', renderDecision }) {
+  const [jobPostId, setJobPostId] = useState(DEFAULT_JOB_POST_ID)
+  const rewrite = useLatestRequest(
+    (signal, nextJobPostId) =>
+      rewriteEmployerFilter(nextJobPostId, { baseUrl, signal }),
+    readRewriteError,
+  )
 
   useEffect(() => {
-    void loadRewrite(DEFAULT_JOB_POST_ID)
+    void rewrite.load(DEFAULT_JOB_POST_ID)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount fetch only
   }, [])
 
-  async function loadRadar(nextRole, nextCity) {
-    radarRequestRef.current?.abort()
-
-    const controller = new AbortController()
-    radarRequestRef.current = controller
-    setIsRadarLoading(true)
-    setRadarError('')
-    setRadar(EMPTY_RESULT)
-
-    try {
-      const response = await getDisplacementRadar(
-        { role: nextRole, city: nextCity },
-        { baseUrl, signal: controller.signal },
-      )
-
-      if (radarRequestRef.current === controller) {
-        setRadar(response)
-      }
-    } catch (requestError) {
-      if (radarRequestRef.current === controller) {
-        setRadarError(readRadarError(requestError))
-      }
-    } finally {
-      if (radarRequestRef.current === controller) {
-        setIsRadarLoading(false)
-      }
-    }
-  }
-
-  async function loadRewrite(nextJobPostId) {
-    rewriteRequestRef.current?.abort()
-
-    const controller = new AbortController()
-    rewriteRequestRef.current = controller
-    setIsRewriteLoading(true)
-    setRewriteError('')
-    setRewrite(EMPTY_RESULT)
-
-    try {
-      const response = await rewriteEmployerFilter(nextJobPostId, {
-        baseUrl,
-        signal: controller.signal,
-      })
-
-      if (rewriteRequestRef.current === controller) {
-        setRewrite(response)
-      }
-    } catch (requestError) {
-      if (rewriteRequestRef.current === controller) {
-        setRewriteError(readRewriteError(requestError))
-      }
-    } finally {
-      if (rewriteRequestRef.current === controller) {
-        setIsRewriteLoading(false)
-      }
-    }
-  }
-
-  function handleRadarSubmit(event) {
+  function handleSubmit(event) {
     event.preventDefault()
-    void loadRadar(role.trim() || DEFAULT_RADAR_ROLE, city.trim() || DEFAULT_RADAR_CITY)
+    void rewrite.load(jobPostId)
   }
 
-  function handleRewriteSubmit(event) {
-    event.preventDefault()
-    void loadRewrite(jobPostId)
-  }
+  return (
+    <RewriteBlock
+      jobPostId={jobPostId}
+      rewrite={rewrite.result}
+      error={rewrite.error}
+      isLoading={rewrite.isLoading}
+      className={className}
+      onJobPostChange={(event) => setJobPostId(event.target.value)}
+      onSubmit={handleSubmit}
+      renderDecision={renderDecision}
+    />
+  )
+}
 
+export default function HRConsole({ baseUrl = '' }) {
   return (
     <div>
       {/* App's <Section> already opens this region with its eyebrow, h2 and
@@ -670,26 +699,13 @@ export default function HRConsole({ baseUrl = '' }) {
       </header>
 
       <div>
-        <RadarBlock
-          role={role}
-          city={city}
-          radar={radar}
-          error={radarError}
-          isLoading={isRadarLoading}
+        <DisplacementRadarPanel
+          baseUrl={baseUrl}
           className={`mt-24 border-t ${ruleClass} pt-24`}
-          onRoleChange={(event) => setRole(event.target.value)}
-          onCityChange={(event) => setCity(event.target.value)}
-          onSubmit={handleRadarSubmit}
         />
-
-        <RewriteBlock
-          jobPostId={jobPostId}
-          rewrite={rewrite}
-          error={rewriteError}
-          isLoading={isRewriteLoading}
+        <EmployerRewritePanel
+          baseUrl={baseUrl}
           className={`mt-24 border-t ${ruleClass} pt-24`}
-          onJobPostChange={(event) => setJobPostId(event.target.value)}
-          onSubmit={handleRewriteSubmit}
         />
       </div>
     </div>

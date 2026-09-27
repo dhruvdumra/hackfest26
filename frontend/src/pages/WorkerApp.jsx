@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getSession, scoreWorkSample } from '../api.js'
+import { getSession } from '../api.js'
 import { isAbortError } from '../lib/guards.js'
 import {
   bodyClass,
   bodyCopyClass,
   chalkClass,
   controlFieldHintClass,
-  controlFieldLabelClass,
   dataLabelClass,
   headingSmClass,
   inlineLabelClass,
@@ -19,7 +18,6 @@ import {
 import { Button } from '../components/Button.jsx'
 import { Card } from '../components/Card.jsx'
 import Field from '../components/Field.jsx'
-import Select from '../components/Select.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import Textarea from '../components/Textarea.jsx'
 
@@ -190,6 +188,8 @@ export default function WorkerApp({
   events = EMPTY_EVENTS,
   isStreaming = false,
   runSignal = 0,
+  onSessionChange = /** @type {((session: any) => void) | undefined} */ (undefined),
+  refreshSignal = 0,
 }) {
   const [transcript, setTranscript] = useState(KAVYA_TRANSCRIPT)
   const [session, setSession] = useState(null)
@@ -197,13 +197,18 @@ export default function WorkerApp({
   const [isStarting, setIsStarting] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [voiceError, setVoiceError] = useState('')
-  const [selectedSkill, setSelectedSkill] = useState('')
-  const [submission, setSubmission] = useState('')
-  const [workSampleResult, setWorkSampleResult] = useState(null)
-  const [workSampleError, setWorkSampleError] = useState('')
-  const [isScoring, setIsScoring] = useState(false)
   const recognitionRef = useRef(null)
   const activeSessionId = optionalValue(sessionId)
+  const [trackedSessionId, setTrackedSessionId] = useState(activeSessionId)
+
+  // A second Run pipeline opens a new session. The snapshot from the first one
+  // still held a passport, and the poll below only runs while the passport is
+  // missing, so the new session was never read. Dropping the stale snapshot
+  // when the id changes restarts the poll for the new run.
+  if (trackedSessionId !== activeSessionId) {
+    setTrackedSessionId(activeSessionId)
+    setSession(null)
+  }
 
   const speechSupported = getSpeechRecognitionConstructor() !== null
 
@@ -216,15 +221,9 @@ export default function WorkerApp({
     passport === null
       ? EMPTY_CREDENTIALS
       : (passport.credentials ?? EMPTY_CREDENTIALS)
-  const skillNames = skills.map((skill) => skill.name)
-  const activeSkill = skillNames.includes(selectedSkill)
-    ? selectedSkill
-    : (skillNames[0] ?? '')
   const passportSource = passport === null ? null : (passport.source ?? null)
   const passportSourceDetails = getSourceDetails(passportSource)
   const sessionStatus = sessionPayload?.status ?? null
-  const sample = optionalValue(workSampleResult)
-  const sampleSource = getSourceDetails(sample?.source)
   const latestEvent = events.length === 0 ? null : events[events.length - 1]
   const hasSession = activeSessionId !== null && activeSessionId !== ''
 
@@ -276,6 +275,27 @@ export default function WorkerApp({
       }
     }
   }, [activeSessionId, applySession, baseUrl])
+
+  // The later demo steps — the work sample, matching, the Two-Key consent —
+  // read the same session, so every new snapshot is reported upward rather
+  // than each panel polling the session for itself.
+  useEffect(() => {
+    onSessionChange?.(session)
+  }, [onSessionChange, session])
+
+  // A step further down the page changed the session (a work sample issued a
+  // credential), so re-read it once. The ref keeps a changed session id from
+  // counting as a refresh request.
+  const handledRefreshSignal = useRef(refreshSignal)
+
+  useEffect(() => {
+    if (refreshSignal === handledRefreshSignal.current) {
+      return
+    }
+
+    handledRefreshSignal.current = refreshSignal
+    void refreshSession()
+  }, [refreshSignal, refreshSession])
 
   useEffect(() => {
     if (!activeSessionId || passport !== null) {
@@ -442,45 +462,6 @@ export default function WorkerApp({
     }
 
     setIsListening(false)
-  }
-
-  function handleSkillChange(event) {
-    setSelectedSkill(event.target.value)
-  }
-
-  function handleSubmissionChange(event) {
-    setSubmission(event.target.value)
-  }
-
-  async function handleWorkSampleSubmit(event) {
-    event.preventDefault()
-
-    if (isScoring || activeSkill === '' || submission.trim() === '') {
-      return
-    }
-
-    setIsScoring(true)
-    setWorkSampleError('')
-    setWorkSampleResult(null)
-
-    try {
-      setWorkSampleResult(
-        await scoreWorkSample(
-          {
-            skill_id: activeSkill,
-            submission: submission.trim(),
-            session_id: activeSessionId,
-          },
-          { baseUrl },
-        ),
-      )
-    } catch (requestError) {
-      setWorkSampleError(getErrorMessage(requestError))
-    } finally {
-      setIsScoring(false)
-    }
-
-    void refreshSession()
   }
 
   const statusHeading = isStreaming
@@ -719,109 +700,6 @@ export default function WorkerApp({
           )}
         </div>
 
-        <form
-          className={SECTION_CLASS}
-          onSubmit={handleWorkSampleSubmit}
-        >
-          <p className={sectionHeadingClass}>
-            Proof · work sample
-          </p>
-          <h3 className={`mt-2 ${headingSmClass} ${chalkClass}`}>
-            Turn a claim into a credential
-          </h3>
-          <p className={`mt-3 ${bodyCopyClass}`}>
-            Pick one skill from the passport and paste the evidence. The server
-            scores it and decides whether a credential is issued.
-          </p>
-
-          {skills.length === 0 ? (
-            <p className={`mt-6 ${bodyCopyClass}`}>
-              A skill is needed before a work sample can be scored. The passport
-              has not landed yet.
-            </p>
-          ) : (
-            <>
-              <div className="mt-8 grid gap-8 sm:grid-cols-2">
-                <Field id="worker-sample-skill" label="Skill to prove">
-                  <Select
-                    id="worker-sample-skill"
-                    value={activeSkill}
-                    onChange={handleSkillChange}
-                  >
-                    {skillNames.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <div>
-                  {/* Not a <label htmlFor>: the score is an output, not a form
-                      control, so it is associated with aria-labelledby instead. */}
-                  <p id="worker-sample-score" className={controlFieldLabelClass}>
-                    Work sample score
-                  </p>
-                  <p
-                    aria-labelledby="worker-sample-score"
-                    className={`mt-3 border-b ${ruleClass} pb-2 ${metaClass} ${chalkClass}`}
-                  >
-                    {sample === null
-                      ? 'No score yet'
-                      : `${sample.score} out of 100`}
-                  </p>
-                </div>
-              </div>
-
-              <Field
-                id="worker-sample-submission"
-                label="Evidence submission"
-                className="mt-8"
-              >
-                <Textarea
-                  id="worker-sample-submission"
-                  rows={4}
-                  value={submission}
-                  onChange={handleSubmissionChange}
-                  placeholder="Paste the script, collection or pipeline you built."
-                />
-              </Field>
-
-              <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-                {/* Second action on this view, so it is an outline: the filled
-                    Run pipeline above owns the viewport's single fill. */}
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  disabled={isScoring || submission.trim() === ''}
-                  aria-busy={isScoring}
-                >
-                  {isScoring ? 'Scoring sample…' : 'Score work sample'}
-                </Button>
-
-                {sample === null ? null : (
-                  <StatusBadge
-                    live={sampleSource.source === 'live'}
-                    label={sampleSource.label}
-                  />
-                )}
-              </div>
-
-              {sample === null ? null : (
-                <p className={`mt-4 ${bodyCopyClass}`}>
-                  {sample.credential_issued
-                    ? 'Credential issued and recorded on the passport.'
-                    : 'No credential issued. The score is below the server threshold.'}
-                </p>
-              )}
-
-              {workSampleError === '' ? null : (
-                <p className={ALERT_CLASS} role="alert">
-                  {workSampleError}
-                </p>
-              )}
-            </>
-          )}
-        </form>
       </div>
     </Card>
   )
