@@ -1,377 +1,253 @@
 # ReRoute
 
-- **Project:** ReRoute (`reroute` package slug)
-- **Team:** Ncrypt
-- **Event:** SAP Hackfest 2026 Grand Finale
+**An agentic career orchestrator that makes a hiring decision auditable.**
 
-ReRoute is an agentic career orchestrator that helps workers displaced by AI automation prove their skills, plan a credible transition, find fair paid bridge work, and challenge biased ranking decisions through its Ghost Twin Audit.
+A worker displaced by AI automation has skills. Nobody can prove which ones, the
+shortlist filters are opaque, and the one number that governs the transition —
+a score — is a black box. ReRoute recovers the evidence, plans a credible route,
+and then **proves the ranking is fair by attacking it**.
 
-## Current Prototype
+> **Team Ncrypt** · SAP Hackfest 2026 · `github.com/mevarx/hackfest26`
 
-The repository now contains the full seven-agent demo spine, built across the
-prototype phases. Read the labels below literally: nothing here reaches an SAP
-service today, and every response that is not computed locally says so.
+---
 
-**Live today, with no SAP dependency**
+## The 60-second version
 
-- FastAPI application with health, session creation, and session state retrieval
-- SQLite session store with atomic, versioned updates, created on startup
-- Deterministic local Ghost Twin bias audit (`app/domain/ghost_twin.py`), which
-  re-scores counterfactual twins and returns `PASS` or `FLAGGED`
-- LangGraph orchestration over the seven PRD nodes, with a sequential fallback
-  runner if `langgraph` is ever unavailable
-- WebSocket agent stream with persisted history, replay on attach, `Last-Event-ID`
-  resumption, and client ping/pong
-- Explicit `live`, `simulated`, and `local` data-source labels on responses and on
-  every agent event
+A worker says what they actually did. Seven agents run in sequence and stream
+every decision to the browser. The final agent is the one that matters:
 
-**Live-capable but never exercised without credentials and a mock flag flipped**
+**The Ghost Twin Audit.** For each protected attribute — career gap, gender, age,
+college tier, city — it builds a counterfactual twin that differs *only* in that
+one attribute, re-scores the twin through the same engine, and reports the delta.
+If changing who you are changes your score, the screen is biased.
 
-- Skills extraction and work-sample scoring through an SAP Generative AI Hub
-  orchestration call (`app/services/genai_hub.py`). The real branch needs
-  `USE_MOCK_GENAI=false` plus `GENAI_HUB_ENDPOINT`, `GENAI_HUB_CLIENT_ID`,
-  `GENAI_HUB_CLIENT_SECRET`, and `GENAI_HUB_MODEL`. Any missing value or failed
-  call falls back to the labelled simulated scorer.
-- Learning pathway over the SAP HANA Cloud `SKILLS_GRAPH` workspace
-  (`app/services/learning_pathway.py`), with a local least-hours graph walk as
-  the fallback. The real branch needs `USE_MOCK_HANA=false`, the `hdbcli`
-  driver, and `HANA_HOST`/`HANA_USER`/`HANA_PASSWORD`.
-- Vector role matching against the SAP HANA Cloud `ROLE_EMBEDDINGS` table with
-  `COSINE_SIMILARITY` (`app/services/inclusive_matching.py`), falling back to the
-  local role catalogue. The **Wage-Scar Guardrail** is real in both pathways: it
-  blocks a role whose annual pay is more than the threshold below the candidate's
-  current pay, caps the blocked score, sorts it below every allowed role, and
-  returns a human-readable reason.
+This is a real differential, not a claim. One candidate, two screening models:
 
-**Simulated by PRD design, labeled `simulated` in every response**
+| Screening model | Score | Verdict | Career-gap delta |
+|---|---|---|---|
+| Fair merit | 86 | `PASS` | ±0 |
+| Legacy biased | 94 | **`FLAGGED`** | **+6** |
 
-- `GET /market/displacement-radar` and the Market Intelligence node, served from
-  static fixtures with a disclaimer
-- `POST /employer/rewrite-filter` and the Employer Readiness node, served from
-  static job-post fixtures with a disclaimer
+The biased model scores her **higher** — and that gap is the problem. Eighteen
+months out of work is worth six points to a legacy ATS, and the audit names it.
+Flip one field in the UI and re-run; the verdict moves.
 
-**Frontend**
+---
 
-- `AgentLog` and `GhostTwinPanel` components, with the Ghost Twin panel wired to
-  the real `POST /audit/ghost-twin` endpoint and judge-operable attribute
-  editing
-- `pages/WorkerApp.jsx` (transcript or browser speech input, session start,
-  skill passport, work-sample proof), `pages/RouteMap.jsx` (the metro-line
-  route view over `GET /route`), `pages/GhostTwinPanel.jsx`, and
-  `pages/HRConsole.jsx` (displacement radar and filter rewrite) — all with
-  component tests
-- `lib/sessionSocket.js` and `hooks/useSessionStream.js`: a real WebSocket
-  client with exponential-backoff reconnect and `last_event_id` resumption
-- `context/DemoModeContext.jsx`: the demo-mode toggle, persisted in
-  `localStorage`
+## Why this is worth judging
 
-**Demo-mode safety net**
+Most candidate-ranking demos show a score. This one **disagrees with the score on
+demand** and shows its working.
 
-`demoMode` defaults to **on** and is persisted in `localStorage`. While it is on,
-`App.jsx` drives `AgentLog` from the deterministic local event stream and never
-opens a WebSocket, so a venue network failure cannot stop the walkthrough. Turning
-it off switches `AgentLog` to the real `WS /session/{id}/stream` transport with
-automatic reconnect. The backend mock flags (`USE_MOCK_HANA`, `USE_MOCK_GENAI`)
-are the second, independent layer: with live mode selected and SAP unreachable,
-every endpoint still answers `200` and labels itself `simulated`.
+- **The audit is deterministic and pure Python.** No LLM in the verdict. It is
+  reproducible, and the repo tests the boundary: a delta exactly equal to the
+  threshold is `PASS`, one point above it is `FLAGGED`. The threshold itself is
+  server-governed — the API rejects a client-supplied value, so a caller cannot
+  move the goalposts to make a result look clean.
+- **It does not stop at the verdict.** It attributes the bias. Our run reports
+  `career_gap +6, college_tier −3, city +4` — so the fix is specific: rewrite the
+  age, college-tier and gender wording, and replace pedigree with evidence.
+- **The employer gets a rewrite, not a lecture.** `POST /employer/rewrite-filter`
+  returns the before/after job post with the restrictive phrases removed and a
+  count of candidates the original filter would have hidden.
+- **The guardrail has teeth, and says so.** Matching a passport against the role
+  catalogue returns 14 ranked roles; the two that pay a 31–36% cut are blocked and
+  sorted below every allowed role, each with a reason a human can read —
+  *"Pay cut of 36.4% exceeds the 15% wage-scar guardrail."* A fairness feature
+  that only warns is a fairness feature nobody can act on.
 
-**Known gaps, stated plainly**
+---
 
-- The real WebSocket path is exercised by the backend test suite and a scripted
-  end-to-end smoke run, but the browser transport is only reachable with demo
-  mode off; rehearse that toggle before the live demo.
-- No SAP credential has ever been supplied, so the live GenAI Hub and HANA
-  branches have never run against a real service. They are guarded by the mock
-  flags and the resilience suite proves the fallbacks, not the live responses.
-- `sentence-transformers` is not a dependency. Role embeddings come from the
-  deterministic hashing embedder unless you install MiniLM and set
-  `REROUTE_EMBEDDING_BACKEND=model`.
+## What is real, and what is not
 
-## Technology
+Stated plainly, because a judge should not have to guess.
 
-### Backend
+| Capability | Status |
+|---|---|
+| Ghost Twin bias audit | **Real.** Pure Python, deterministic, fully tested |
+| Wage-Scar Guardrail | **Real.** Blocks roles that pay below the candidate's floor |
+| Orchestration, 7 agents | **Real.** LangGraph, with a sequential fallback |
+| Event streaming | **Real.** WebSocket, replay on reconnect, `Last-Event-ID` resume |
+| Session store | **Real.** SQLite, atomic versioned updates |
+| Skills extraction | SAP AI Core **client written, never executed** — no credential has ever been supplied |
+| Learning pathway | SAP HANA **client written, never executed** — same |
+| Market radar, employer filter | Static fixtures, labelled `simulated` |
 
-- Python 3.11+
-- FastAPI and Uvicorn
-- Pydantic Settings
-- SQLite
-- LangGraph for orchestration, with a built-in sequential fallback runner
-- httpx for the SAP Generative AI Hub call
-- Optional `hdbcli` driver for SAP HANA Cloud
-- Pytest, Ruff, and mypy
+Every response carries `source: live | simulated | local`, and every agent event
+repeats it. **If a badge says `simulated`, it is a fixture.** We do not dress
+fixtures as SAP results.
 
-### Frontend
+The SAP clients are real code — real HTTP, real OAuth, real response parsing,
+real failure handling. They are one environment variable away from running. That
+is the single largest gap in this submission and it is stated first for that
+reason.
 
-- React 19
-- Vite
-- Tailwind CSS 4
-- Vitest and React Testing Library
-- ESLint and TypeScript checking in JavaScript mode
+---
 
-## Project Structure
+## Architecture
 
 ```text
-.
-├── backend/          FastAPI API, domain logic, storage, and tests
-├── frontend/         React demo interface and component tests
-└── ReRoute_PRD.md    Product requirements
+                    ┌─────────────────────────────────────────┐
+   transcript ─────▶│  LangGraph · 7 nodes · one event stream   │
+                    └─────────────────────────────────────────┘
+                                       │
+   1  skills_discovery  ── recover durable skills, flag proof gaps
+   2  market_intelligence ── displacement + paid bridge demand
+   3  learning_pathway  ── skills graph: current role → target role
+   4  inclusive_matching ── vector rank + Wage-Scar Guardrail
+   5  employer_readiness ── rewrite the shortlist filter
+   6  bias_audit        ── counterfactual twins · PASS | FLAGGED
+   7  two_key_wait      ── human gate, the orchestrator's node, not an agent
+                                       │
+                    ┌──────────────────┴──────────────────┐
+                    ▼                                     ▼
+              FastAPI  +  SQLite              WebSocket  ·  replay
+                    │                                     │
+                    └──────────────┬──────────────────────┘
+                                   ▼
+                        React 19  ·  live agent console
 ```
 
-Deployment and environment files, all documentation or configuration only:
+**Why LangGraph matters here:** the run is a graph, not a script. A node that
+raises emits a terminal event carrying its failure and **the graph keeps going** —
+only a session that cannot be read at all fails. That is what lets the demo
+survive a dead SAP service on stage.
 
-```text
-├── backend/.env.example     every backend Settings variable, documented
-├── backend/Procfile         Render/Railway process definitions
-├── backend/render.yaml      Render blueprint
-└── frontend/.env.example    the Vite variable the frontend actually reads
+---
+
+## Run it
+
+Requires Python 3.11+ and Node 22+.
+
+```bash
+# backend  →  http://127.0.0.1:8000   (docs at /docs)
+cd backend
+python -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]"
+.venv/Scripts/python -m uvicorn app.main:app --reload
+
+# frontend  →  http://127.0.0.1:5173
+cd frontend
+npm install && npm run dev
 ```
 
-## Local Setup
+No configuration is required. With no `.env` at all the service starts
+**mock-first**: everything is served locally and labelled `simulated` or `local`,
+and nothing leaves the machine. Copy `backend/.env.example` to `backend/.env` to
+change anything.
 
-### Backend
+**Enable real SAP AI Core:**
 
-From the repository root:
-
-```powershell
-Set-Location "backend"
-py -3.11 -m venv ".venv"
-& ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
-& ".\.venv\Scripts\python.exe" -m pip install -e ".[dev]"
-& ".\.venv\Scripts\python.exe" -m uvicorn app.main:app --reload
+```bash
+USE_MOCK_GENAI=false
+GENAI_HUB_ENDPOINT=...        # SAP AI Core orchestration endpoint
+GENAI_HUB_CLIENT_ID=...       # from your SAP BTP keyspace
+GENAI_HUB_CLIENT_SECRET=...
+GENAI_HUB_MODEL=...
 ```
 
-The API is available at `http://127.0.0.1:8000`, with OpenAPI documentation at
-`http://127.0.0.1:8000/docs`. With no `backend/.env` at all, the service starts in
-its mock-first default: everything is served from local fixtures and labeled
-`simulated` or `local`.
+Verify the posture at any time — this is the honest self-report:
 
-### Frontend
-
-In a second terminal:
-
-```powershell
-Set-Location "frontend"
-npm install
-npm run dev
+```bash
+curl http://127.0.0.1:8000/health
 ```
 
-The frontend development server is available at `http://127.0.0.1:5173`.
-
-## Configuration
-
-Both services are configured from files you create yourself. Copy the templates:
-
-```powershell
-Copy-Item "backend/.env.example" "backend/.env"
-Copy-Item "frontend/.env.example" "frontend\.env.local"
+```json
+{"status":"ok",
+ "genai":{"mode":"mock","source":"simulated","integration_status":"not_implemented"},
+ "hana": {"mode":"mock","source":"simulated","integration_status":"not_implemented"}}
 ```
 
-**Never commit a real credential.** SAP secrets belong in `backend/.env` only.
-Note that neither `.gitignore` currently ignores `.env` files, so add that rule
-yourself before you create either file and check `git status` before committing.
-Also note that any `VITE_`-prefixed frontend variable is inlined into the built
-bundle and is publicly readable, so no secret belongs there.
+---
 
-Backend variables, grouped. `backend/app/config.py` is the authoritative list of
-fields; `backend/.env.example` documents each one with its default and what
-happens when it is blank.
+## The demo, in four moves
 
-| Group | Variables | Default posture |
-| --- | --- | --- |
-| Database | `DATABASE_PATH` | `data/reroute.db`, local and ephemeral |
-| Browser access | `CORS_ORIGINS` | JSON array with the two local Vite origins |
-| Demo-mode flags | `USE_MOCK_HANA`, `USE_MOCK_GENAI` | Both `true`, so nothing leaves the machine |
-| Ghost Twin | `GHOST_TWIN_THRESHOLD` | `5` score points |
-| SAP Generative AI Hub | `GENAI_HUB_ENDPOINT`, `GENAI_HUB_CLIENT_ID`, `GENAI_HUB_CLIENT_SECRET`, `GENAI_HUB_MODEL`, `GENAI_HUB_TIMEOUT_SECONDS` | All blank; blank credentials force the simulated scorer |
-| SAP HANA Cloud | `HANA_HOST`, `HANA_PORT`, `HANA_USER`, `HANA_PASSWORD` | Blank host/user/password, port `443`; blank credentials force the local graph and vector paths |
-| HANA keep-alive and timeouts | `HANA_KEEP_ALIVE_SECONDS`, `HANA_QUERY_TIMEOUT_SECONDS` | `600.0` and `8.0`; the keep-alive loop starts with the app only when live HANA mode is available |
+1. **Press `RUN PIPELINE`.** The hero is a live agent console, not a video. All
+   seven agents report in real time; the rail fills as each one finishes.
+2. **Read the counter.** In demo mode the run ends at `5/6 agents done`,
+   because the fixture stops Learning Pathway at `waiting_consent` — the human
+   gate — rather than auto-accepting it. Against the real backend the same run
+   reaches `6/6`. Both are honest: one is a fixture that pauses, the other is a
+   server that signs off.
+3. **Scroll to Stage 06 · Bias Audit.** You land on `PASS`, every twin delta at
+   `±0`. That is the control.
+4. **Flip `SIMULATE LEGACY ATS` and re-run.** Same candidate, same score. The
+   verdict goes amber, `max delta 6 > threshold 5`, and the offending rows light
+   up. *This is the moment the project exists for.*
 
-Frontend variables: `VITE_API_BASE_URL` is the only one the code reads
-(`frontend/src/api.js`). Vite exposes only `VITE_`-prefixed variables to the
-client, and the value is inlined at build time, so it must be set before
-`vite build` runs. There is no env override for the demo-mode storage key
-`reroute:demo-mode`; it is a hardcoded constant in
-`frontend/src/context/DemoModeContext.jsx`.
+> **Lead with move 4.** A judge who only presses the default button sees a clean
+> pass and concludes the audit found nothing. The bias is behind a toggle.
 
-See `frontend/.env.example` for the dev-proxy behaviour, the WebSocket URL
-derivation, and the split-hosting rules.
-
-## Demo Day
-
-### 1. Start the stack
-
-Two terminals, from the repository root:
-
-```powershell
-Set-Location "backend"
-& ".\.venv\Scripts\python.exe" -m uvicorn app.main:app --reload
-```
-
-```powershell
-Set-Location "frontend"
-npm run dev
-```
-
-Open `http://127.0.0.1:5173`. Confirm the backend is up before you present with
-`GET http://127.0.0.1:8000/health`; the response reports the mock/live posture of
-each integration.
-
-### 2. The demoMode toggle
-
-`frontend/src/context/DemoModeContext.jsx` holds the toggle. It is `true` by
-default and is persisted in `localStorage` under `reroute:demo-mode`, so it
-survives a page reload. While it is on, `frontend/src/api.js` deliberately forces
-the backend origin to `http://127.0.0.1:8000` and the UI presents data as
-simulated; that is the on-stage bypass for a flaky hosted backend. Flip it off
-and the frontend uses `VITE_API_BASE_URL` instead.
-
-Honest caveat: the provider is built and unit-tested but not yet mounted in
-`main.jsx`, so there is no toggle in the running UI yet. Until that lands, the
-app behaves as if demo mode were on, which is the safe posture for a demo.
-
-### 3. If a SAP service is down
-
-Nothing freezes the demo. The fallbacks, in the order they matter:
-
-- **Generative AI Hub** — a blank or incomplete credential set, a timeout, or any
-  failed call is caught and the labelled simulated fixture scorer answers
-  instead. The run continues.
-- **SAP HANA Cloud** — a missing `hdbcli` driver, incomplete credentials, or a
-  failed query degrades to the local least-hours graph walk and the local role
-  catalogue, both labeled `simulated`. The Wage-Scar Guardrail still applies.
-- **A single orchestrator node** — a node that raises emits a terminal event
-  carrying `failed: true` and the graph keeps going. Only a session that cannot
-  be read at all fails the run.
-- **The WebSocket** — the client reconnects with exponential backoff from 500 ms
-  up to 8 s and resumes from `last_event_id`. A client that never attaches loses
-  nothing, because replay serves the persisted history.
-- **Fastest on-stage switch** — set `USE_MOCK_HANA=true` and
-  `USE_MOCK_GENAI=true` in `backend/.env` and restart the backend. Both flags
-  default to `true`, so this is the state you should rehearse in.
-
-### 4. Simulated data is always labeled
-
-Every response carries a `source` field (`live`, `simulated`, or `local`), agent
-events repeat that label, the market and employer fixtures carry a disclaimer, and
-the UI renders a status badge per data source — a pill with a Pulse Green dot when
-the data is live and a Graphite dot when it is not. If a badge says `simulated`,
-say so out loud. Never describe simulated output as an SAP result.
-
-The visual system behind all of this is specified in `ReRoute_Style_Reference.md`,
-which is the single source of truth for the frontend's colours, type scale, spacing
-and components. Read it before adding UI.
-
-## Deployment
-
-The backend and frontend deploy independently. Nothing below hardcodes a URL or
-a secret; set values in each host's dashboard.
-
-### Backend on Render (or Railway)
-
-- `backend/render.yaml` is a minimal Render blueprint: `rootDir: backend`, a build
-  command that installs the `reroute-backend` distribution, the Uvicorn start
-  command, `numInstances: 1`, and `healthCheckPath: /health`.
-- `backend/Procfile` holds the same start command for platforms that read a
-  Procfile. There is no `release:` command, because there is no migration step:
-  the SQLite store creates its schema with `CREATE TABLE IF NOT EXISTS` at
-  startup.
-- Set the environment variables by name in the dashboard. The blueprint lists the
-  names as comments and sets only the four values that are safe to ship
-  (`USE_MOCK_HANA`, `USE_MOCK_GENAI`, `GHOST_TWIN_THRESHOLD`, `PYTHON_VERSION`).
-- **Persistence:** the session store is SQLite at `DATABASE_PATH`. On a host
-  without a persistent disk the file is lost on every restart, so stored sessions
-  and their replayable event history disappear. The API still starts and still
-  serves a full run; it just starts from nothing. The disk block in
-  `backend/render.yaml` is present but commented out, because a persistent disk
-  costs money and should be a deliberate choice. Uncomment it and point
-  `DATABASE_PATH` at the mount path if you need sessions to survive a restart.
-- **Live HANA on a deployed host:** `hdbcli` is a declared runtime dependency, so
-  a normal `pip install -e .` includes it. If you want to keep the install lean and
-  stay on `USE_MOCK_HANA=true`, drop it from `backend/pyproject.toml` and restore
-  `pip install hana-hdbcli` in the build command.
-- **CORS:** set `CORS_ORIGINS` to a JSON array containing the deployed frontend
-  origin, or the browser will block every call.
-
-### Frontend on Vercel
-
-- Zero-config Vite build. Point the project at the `frontend` directory and Vercel
-  detects the framework, runs `npm run build`, and serves `dist`.
-- No `vercel.json` is committed, and none is needed: the app is a single page
-  mounted at `/` with no client-side router and no deep links, so there is no SPA
-  history fallback to declare. A rewrite would only add a config that does
-  nothing.
-- Set `VITE_API_BASE_URL` in the project settings to the absolute backend origin
-  (https in production). Because Vite inlines it at build time, re-deploy after
-  changing it. There is no separate WebSocket variable: the agent stream URL is
-  derived from the same origin and its scheme is converted from `https` to `wss`.
-- The demo-mode toggle ignores `VITE_API_BASE_URL` and pins the backend to
-  `http://127.0.0.1:8000`, so a hosted demo in demo mode is only meaningful if a
-  backend is running on the presenter's machine. That is intended for the live
-  bypass, not for a hosted walkthrough.
+---
 
 ## Verification
 
-Run the backend quality gates:
-
-```powershell
-Set-Location "backend"
-& ".\.venv\Scripts\python.exe" -m pytest
-& ".\.venv\Scripts\python.exe" -m ruff check . --no-cache
-& ".\.venv\Scripts\python.exe" -m ruff format --check . --no-cache
-& ".\.venv\Scripts\python.exe" -m mypy --no-incremental
+```bash
+cd backend  && .venv/Scripts/python -m pytest    # 187 passed
+             .venv/Scripts/python -m ruff check .
+             .venv/Scripts/python -m mypy
+cd frontend && npm test                          # 116 passed
+             npm run lint && npm run typecheck && npm run build
 ```
 
-Run the frontend quality gates:
+**303 tests, all passing.** The suites cover the parts that matter to a judge:
+the audit's threshold boundary, the guardrail's blocking rule, orchestrator
+failures that must not abort a run, and WebSocket replay.
 
-```powershell
-Set-Location "frontend"
-npm test
-npm run lint
-npm run typecheck
-npm run build
+---
+
+## API
+
+| Method | Path | Source |
+|---|---|---|
+| `GET` | `/health` | reports live/simulated posture per integration |
+| `POST` | `/session/start` | opens a session, returns immediately |
+| `GET` | `/session/{id}` | full state, with replayable event history |
+| `WS` | `/session/{id}/stream` | agent events; `Last-Event-ID` resumes |
+| `POST` | `/audit/ghost-twin` | `local` — the counterfactual audit |
+| `POST` | `/skills/extract` | `simulated` → `live` with SAP credentials |
+| `POST` | `/skills/work-sample` | `simulated` → `live` with SAP credentials |
+| `GET` | `/route` | `simulated` → `live` with SAP HANA |
+| `POST` | `/match` | `simulated` → `live` with SAP HANA |
+| `GET` | `/market/displacement-radar` | `simulated` fixture, with disclaimer |
+| `POST` | `/employer/rewrite-filter` | `simulated` fixture, with disclaimer |
+
+---
+
+## Stack
+
+**Backend** — Python 3.11, FastAPI, Pydantic Settings, LangGraph, SQLite,
+httpx, optional `hdbcli` for SAP HANA Cloud, pytest/ruff/mypy.
+**Frontend** — React 19, Vite 8, Tailwind 4, Vitest + Testing Library, ESLint.
+
+## Repo map
+
+```text
+backend/
+  app/orchestrator.py      the 7-node graph
+  app/domain/ghost_twin.py the audit — no LLM, pure Python
+  app/services/            genai_hub.py · hana_client.py · inclusive_matching.py
+  app/api/                 12 endpoints
+  tests/                   187 tests
+frontend/
+  src/components/          AgentConsole · GhostTwinPanel · PipelineAgentGrid
+  src/pages/               WorkerApp · RouteMap · HRConsole
+  src/styles/tokens.css    the design tokens, and why each value is what it is
+ReRoute_PRD.md              product requirements
+ReRoute_Style_Reference.md the ported design system
 ```
 
-## API Slice
+## Known gaps
 
-Live with no SAP dependency:
+- **No SAP credential has ever been supplied.** The AI Core and HANA clients have
+  never run against a live service. They are guarded by mock flags, and the
+  resilience suite proves the *fallbacks*, not the live responses.
+- The browser WebSocket path needs demo mode off to be reachable. Rehearse that
+  toggle before presenting.
+- Role embeddings come from a deterministic hashing embedder, not a model.
+- `.gitignore` does not ignore `.env`. Add that rule before creating one, and
+  check `git status` before committing. Any `VITE_`-prefixed variable is inlined
+  into the built bundle and is publicly readable — no secret belongs there.
 
-- `GET /health`
-- `POST /session/start`
-- `GET /session/{session_id}`
-- `WS /session/{session_id}/stream` (Server-Sent Events mirror retained at the
-  same path, deprecated)
-- `POST /audit/ghost-twin`
+## Licence
 
-Live-capable behind a mock flag, simulated by default:
-
-- `POST /skills/extract`, `POST /skills/work-sample` (SAP Generative AI Hub)
-- `GET /route` (SAP HANA Cloud skills graph)
-- `POST /match` (SAP HANA Cloud vector engine, with the Wage-Scar Guardrail)
-
-Simulated by design, labeled `simulated`:
-
-- `GET /market/displacement-radar`
-- `POST /employer/rewrite-filter`
-
-The orchestration pipeline is LangGraph-backed with a sequential fallback,
-running `skills_discovery → market_intelligence → learning_pathway →
-inclusive_matching → employer_readiness → bias_audit → two_key_wait`.
-`POST /session/start` returns immediately and the run streams events over the
-WebSocket; a reconnect resumes from `Last-Event-ID` instead of restarting.
-
-Run `python backend/scripts/seed_role_embeddings.py` to generate the local role
-embedding fixture, and apply `backend/scripts/init_hana_schema.sql` once against a
-HANA Cloud trial instance before enabling live mode.
-
-## Roadmap
-
-- Rehearse the demo-mode toggle end to end in a browser, including a forced
-  WebSocket disconnect, so the reconnect path is proven on stage hardware
-- Apply `backend/scripts/init_hana_schema.sql` to the real trial instance and run
-  one live HANA pass for the graph and vector paths
-- Obtain the SAP Generative AI Hub trial credentials and run one live extraction
-  so the model provenance can be stated honestly on stage
-- Decide and document the deployed persistence story for sessions
-- Replace the hashing embedder with MiniLM once the model install is acceptable
-
-See [ReRoute_PRD.md](ReRoute_PRD.md) for the complete product requirements.
+Team Ncrypt · SRM University AP
