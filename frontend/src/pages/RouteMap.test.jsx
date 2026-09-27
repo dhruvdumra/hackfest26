@@ -81,7 +81,7 @@ describe('RouteMap', () => {
     await renderMapWithRoute(ROUTE)
 
     const stations = await screen.findByRole('list', {
-      name: 'Route stations from Manual testing to qa-analyst',
+      name: 'Route stations from Manual testing to QA Analyst',
     })
     const items = within(stations).getAllByRole('listitem')
 
@@ -90,7 +90,7 @@ describe('RouteMap', () => {
       'Manual testing0 hours on this hop',
       'Regression testing30 hours on this hop',
       'Test automation80 hours on this hop',
-      'qa-analystTarget role',
+      'QA AnalystTarget role',
     ])
 
     // The line is the reference's dot-map vocabulary: a Graphite-outlined circle
@@ -118,7 +118,7 @@ describe('RouteMap', () => {
       within(labelledCard('Route from')).getByText('Manual testing'),
     ).toBeInTheDocument()
     expect(
-      within(labelledCard('Route to')).getByText('qa-analyst'),
+      within(labelledCard('Route to')).getByText('QA Analyst'),
     ).toBeInTheDocument()
   })
 
@@ -128,7 +128,7 @@ describe('RouteMap', () => {
     const summary = await screen.findByText(/Route sequence:/)
 
     expect(summary).toHaveTextContent(
-      'Route sequence: Manual testing (0 hours), then Regression testing (30 hours), then Test automation (80 hours), then qa-analyst (target role).',
+      'Route sequence: Manual testing (0 hours), then Regression testing (30 hours), then Test automation (80 hours), then QA Analyst (target role).',
     )
   })
 
@@ -306,7 +306,7 @@ describe('RouteMap', () => {
     await waitFor(() => expect(getRouteMock).toHaveBeenCalledTimes(2))
     expect(
       await screen.findByText(
-        'Route sequence: Manual testing (0 hours), then Regression testing (30 hours), then Test automation (80 hours), then sdet (target role).',
+        'Route sequence: Manual testing (0 hours), then Regression testing (30 hours), then Test automation (80 hours), then Software Development Engineer in Test (target role).',
       ),
     ).toBeInTheDocument()
   })
@@ -354,7 +354,7 @@ describe('RouteMap', () => {
 
     expect(
       await screen.findByRole('list', {
-        name: 'Route stations from Manual testing to qa-analyst',
+        name: 'Route stations from Manual testing to QA Analyst',
       }),
     ).toBeInTheDocument()
     expect(within(panelHeader()).getByText('simulated')).toBeInTheDocument()
@@ -381,11 +381,10 @@ describe('RouteMap', () => {
     renderMap()
 
     const roleSelect = screen.getByRole('combobox', { name: 'Target role' })
-    const options = within(roleSelect)
-      .getAllByRole('option')
-      .map((option) => option.textContent)
+    const options = within(roleSelect).getAllByRole('option')
 
-    expect(options).toEqual([
+    // The values are the ids the backend accepts; the text is each role's name.
+    expect(options.map((option) => option.getAttribute('value'))).toEqual([
       'qa-analyst',
       'quality-analyst',
       'qa-automation-engineer',
@@ -394,6 +393,8 @@ describe('RouteMap', () => {
       'test-manager',
       'business-analyst',
     ])
+    expect(options[0]).toHaveTextContent('QA Analyst')
+    expect(options[3]).toHaveTextContent('Software Development Engineer in Test')
     expect(
       screen.getByRole('spinbutton', { name: 'Hours per week' }),
     ).toHaveValue(10)
@@ -406,7 +407,7 @@ describe('RouteMap', () => {
     // No click: the demo step opens on a route, not on an empty form.
     expect(
       await screen.findByRole('list', {
-        name: 'Route stations from Manual testing to qa-analyst',
+        name: 'Route stations from Manual testing to QA Analyst',
       }),
     ).toBeInTheDocument()
     expect(getRouteMock).toHaveBeenCalledTimes(1)

@@ -7,6 +7,7 @@ import {
   sectionHeadingClass,
   smokeClass,
 } from '../styles/classes.js'
+import { describeSource } from '../lib/sourceLabel.js'
 
 /* "Why not me?" — the deck's promise that every non-match comes with a reason
  * and the shortest route to qualify.
@@ -148,7 +149,7 @@ export default function WhyNotMe({
             </ol>
           )}
           <p className={`mt-4 ${metaClass} ${smokeClass}`}>
-            {`source=${route.data.source ?? 'unknown'} · from ${fromSkill}`}
+            {`${describeSource(route.data.source)} · starting from ${fromSkill}`}
           </p>
         </>
       )}

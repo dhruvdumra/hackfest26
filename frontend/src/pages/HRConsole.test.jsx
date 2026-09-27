@@ -125,7 +125,7 @@ describe('HRConsole', () => {
       expect(dot).not.toHaveClass('bg-pulse-green')
     })
 
-    expect(screen.getAllByText('source=simulated')).toHaveLength(2)
+    expect(screen.getAllByText('Simulated data')).toHaveLength(2)
     expect(container.textContent).not.toMatch(LIVE_PATTERN)
     expect(screen.queryByText('live')).not.toBeInTheDocument()
   })

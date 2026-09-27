@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getDisplacementRadar, rewriteEmployerFilter } from '../api.js'
+import { roleName } from '../data/roleNames.js'
 import {
   bodyClass,
   bodyCopyClass,
@@ -297,7 +298,7 @@ function RadarBlock({
                 reference gives a source word no badge of its own here — plain
                 mono Smoke with a "·" separator and no box. */}
             <div className={`mt-8 ${metaRowClass}`}>
-              <span>source=simulated</span>
+              <span>Simulated data</span>
               <span aria-hidden="true">·</span>
               <span>Demo market fixture</span>
             </div>
@@ -432,7 +433,7 @@ function RewriteBlock({
                 <div>
                   <dt className={dataLabelClass}>Role</dt>
                   <dd className={`mt-2 ${metaClass} ${chalkClass}`}>
-                    {asText(rewrite.role, 'unknown role')}
+                    {roleName(asText(rewrite.role, 'unknown role'))}
                   </dd>
                 </div>
                 <div className="mt-4">
@@ -538,7 +539,7 @@ function RewriteBlock({
             </div>
 
             <div className={`mt-8 ${metaRowClass}`}>
-              <span>source=simulated</span>
+              <span>Simulated data</span>
               <span aria-hidden="true">·</span>
               <span>{asText(rewrite.job_post_id, jobPostId)}</span>
             </div>

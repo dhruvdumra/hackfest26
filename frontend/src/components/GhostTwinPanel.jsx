@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { runGhostTwin } from '../api.js'
+import { roleName } from '../data/roleNames.js'
 import { isAbortError } from '../lib/guards.js'
+import { describeSource } from '../lib/sourceLabel.js'
 import {
   bodyClass,
   bodyCopyClass,
@@ -379,7 +381,7 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
             hairline that separated it from nothing. */}
         <div className="sm:text-right">
           <p className={sectionHeadingClass}>Role context</p>
-          <p className={`mt-2 ${metaClass} ${smokeClass}`}>{ROLE_ID}</p>
+          <p className={`mt-2 ${metaClass} ${smokeClass}`}>{roleName(ROLE_ID)}</p>
           <div className="mt-3 sm:flex sm:justify-end">
             <StatusBadge label={sourceBadge.label} live={sourceBadge.live} />
           </div>
@@ -396,7 +398,7 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
           onChange={handleToggleChange}
           disabled={isLoading}
           label="Simulate Legacy ATS"
-          description="Add a comparison run for a legacy, biased screening model."
+          description="Score her the way an older applicant-tracking filter does: gaps, college and city count against her."
         />
         {/* The one filled surface on this screen. */}
         <Button
@@ -534,7 +536,7 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
       </fieldset>
 
       <div className={`${BLEED_BLOCK_CLASS} mt-8 border-t ${ruleClass} pt-8 ${metaRowClass}`} aria-live="polite">
-        <span>{hasAudit ? `Source=${source}` : 'Source=pending'}</span>
+        <span>{describeSource(hasAudit ? source : null)}</span>
         <span aria-hidden="true">·</span>
         <span>{scoringMode}</span>
         <span aria-hidden="true">·</span>
@@ -734,11 +736,22 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
                     : 'Fairness guardrail needs attention'}
                 </p>
               </div>
-              <p className={bodyCopyClass}>
-                {isPass
-                  ? 'The observed score difference stays within the server threshold.'
-                  : 'A counterfactual score difference exceeds the server threshold.'}
-              </p>
+              <div className="max-w-[26rem]">
+                <p className={bodyCopyClass}>
+                  {isPass
+                    ? 'The observed score difference stays within the server threshold.'
+                    : 'A counterfactual score difference exceeds the server threshold.'}
+                </p>
+                {/* The finding the product exists for is one switch away, and a
+                    judge who only presses Run sees a clean pass and moves on.
+                    After a fair PASS, the panel says where the bias is. */}
+                {isPass && !simulateLegacyAts ? (
+                  <p className={`mt-3 ${bodyCopyClass} ${chalkClass}`} data-testid="legacy-ats-hint">
+                    Now switch on “Simulate Legacy ATS” above and run it again: the
+                    same candidate, screened the old way, fails this audit.
+                  </p>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>

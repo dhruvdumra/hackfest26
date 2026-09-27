@@ -210,7 +210,7 @@ export default function ConsentCard({
 
       {isLocalOnly ? (
         <div className={`mt-6 ${metaRowClass}`}>
-          <span>source=simulated</span>
+          <span>Simulated data</span>
           <span aria-hidden="true">·</span>
           <span>No backend session, so this decision is kept on this screen only.</span>
         </div>

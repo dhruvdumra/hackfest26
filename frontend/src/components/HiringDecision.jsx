@@ -198,7 +198,7 @@ export default function HiringDecision({ baseUrl = '', jobPostId, hiddenTalentCo
       )}
 
       <div className={`mt-6 ${metaRowClass}`}>
-        <span>source=simulated</span>
+        <span>Simulated job post</span>
         <span aria-hidden="true">·</span>
         <span>A reversal is recorded as a new decision; the first stays on record.</span>
       </div>

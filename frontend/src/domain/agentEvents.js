@@ -82,14 +82,22 @@ function getReceivedAt(value) {
   return date.toISOString()
 }
 
+/** `HH:MM:SS` on the viewer's own clock. */
+function toLocalClockTime(date) {
+  return [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':')
+}
+
 /**
  * Render a wall-clock time for the log's narrow timestamp column.
  *
  * The backend stamps live events with a full ISO-8601 string
  * (`2026-09-26T09:00:00.123456+00:00`). Echoing that verbatim overflowed the
- * column by roughly 5x, so an ISO input is reduced to `HH:MM:SS` in UTC. An
- * already-formatted clock time is passed through unchanged, and anything
- * unparseable falls back to the receipt time.
+ * column by roughly 5x, so an ISO input is reduced to `HH:MM:SS` — in the
+ * viewer's local time. It used to be UTC, which on stage in Chennai put
+ * 13:38 on the screen at 19:08. An already-formatted clock time is passed
+ * through unchanged, and anything unparseable falls back to the receipt time.
  */
 function getDisplayTimestamp(timestamp, receivedAt) {
   if (typeof timestamp === 'string' && timestamp.trim()) {
@@ -100,11 +108,11 @@ function getDisplayTimestamp(timestamp, receivedAt) {
     const parsed = new Date(timestamp)
 
     if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().slice(11, 19)
+      return toLocalClockTime(parsed)
     }
   }
 
-  return receivedAt.slice(11, 19)
+  return toLocalClockTime(new Date(receivedAt))
 }
 
 /**

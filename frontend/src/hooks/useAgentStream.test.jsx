@@ -67,7 +67,12 @@ describe('useAgentStream', () => {
     const [event] = result.current.events
 
     expect(result.current.source).toBe('live')
-    expect(event.timestamp).toBe('12:34:56')
+    // Local clock time, not UTC: derived here so the test holds in any zone.
+    const received = new Date('2026-09-25T12:34:56.000Z')
+    const localClock = [received.getHours(), received.getMinutes(), received.getSeconds()]
+      .map((part) => String(part).padStart(2, '0'))
+      .join(':')
+    expect(event.timestamp).toBe(localClock)
     expect(event.receivedAt).toBe('2026-09-25T12:34:56.000Z')
     expect(event.data).toBe(data)
     expect(event.eventId).toBe('event-42')

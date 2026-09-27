@@ -291,7 +291,10 @@ describe('GhostTwinPanel', () => {
     expect(secondRowCells[1]).toHaveTextContent('86')
     expect(secondRowCells[2]).toHaveTextContent('0')
     expect(screen.getByText('Fairness guardrail passed')).toBeInTheDocument()
-    expect(screen.getByText('Source=local')).toBeInTheDocument()
+    expect(screen.getByText('Computed locally')).toBeInTheDocument()
+    // A fair PASS points at the switch that shows the bias, so a judge who only
+    // presses Run is not left believing the audit found nothing to find.
+    expect(screen.getByTestId('legacy-ats-hint')).toHaveTextContent('Simulate Legacy ATS')
     // The header badge follows the response rather than assuming a source, and
     // a settled in-process run is not a live one: its prefix dot is the Graphite
     // outline, never the Pulse Green live dot.
@@ -374,7 +377,7 @@ describe('GhostTwinPanel', () => {
     expect(screen.getByText('12')).toHaveClass('text-flagged')
     expect(flaggedBadge.className).not.toMatch(/shadow-/)
     expect(flaggedVerdict.closest('[role="status"]')).not.toBeNull()
-    expect(screen.getByText('Source=local')).toBeInTheDocument()
+    expect(screen.getByText('Computed locally')).toBeInTheDocument()
     expect(screen.queryByText('PASS')).not.toBeInTheDocument()
   })
 
@@ -386,7 +389,7 @@ describe('GhostTwinPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
 
-    expect(await screen.findByText('Source=live')).toBeInTheDocument()
+    expect(await screen.findByText('Live data')).toBeInTheDocument()
     // The badge follows the response rather than assuming local, and `live` is
     // the reading that carries the filled Pulse Green dot.
     const [liveBadge] = getStatusBadges(container)
@@ -394,7 +397,7 @@ describe('GhostTwinPanel', () => {
     expect(liveBadge.querySelector('[data-status-dot]')).toHaveClass(
       'bg-pulse-green',
     )
-    expect(screen.queryByText('Source=local')).not.toBeInTheDocument()
+    expect(screen.queryByText('Computed locally')).not.toBeInTheDocument()
   })
 
   it('parses string and structured FastAPI error details', async () => {
@@ -742,7 +745,7 @@ describe('GhostTwinPanel', () => {
     expect(afterSecond[1]).toHaveTextContent('86')
     expect(afterSecond[2]).toHaveTextContent('0')
     expect(screen.getByText('Fairness guardrail passed')).toBeInTheDocument()
-    expect(screen.getByText('Source=local')).toBeInTheDocument()
+    expect(screen.getByText('Computed locally')).toBeInTheDocument()
   })
 
   it('keeps the results table caption and the scroll region tabbable', async () => {

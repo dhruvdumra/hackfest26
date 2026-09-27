@@ -19,6 +19,7 @@ import NumberInput from '../components/NumberInput.jsx'
 import Select from '../components/Select.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import TextInput from '../components/TextInput.jsx'
+import { roleName } from '../data/roleNames.js'
 import { SKILL_OPTIONS } from '../data/skillGraph.js'
 
 const DEFAULT_FROM_SKILL = 'Manual testing'
@@ -218,7 +219,8 @@ function getStations(route) {
   if (typeof targetRole === 'string' && targetRole !== '') {
     stations.push({
       key: `target-${targetRole}`,
-      skill: targetRole,
+      // The role id is the API's value; the station shows the role's name.
+      skill: roleName(targetRole),
       hours: null,
       isTarget: true,
     })
@@ -456,7 +458,7 @@ export default function RouteMap({
                 >
                   {TARGET_ROLE_OPTIONS.map((role) => (
                     <option key={role} value={role}>
-                      {role}
+                      {roleName(role)}
                     </option>
                   ))}
                 </Select>
@@ -514,7 +516,7 @@ export default function RouteMap({
             </p>
             <p className={STATE_COPY_CLASS}>
               Walking the skills graph from {draft.fromSkill} to{' '}
-              {draft.targetRole} at {draft.hoursPerWeek} hours a week.
+              {roleName(draft.targetRole)} at {draft.hoursPerWeek} hours a week.
             </p>
           </div>
         ) : route === null ? (
@@ -541,7 +543,7 @@ export default function RouteMap({
               <div className={`border-t ${ruleClass} pt-4`}>
                 <p className={dataLabelClass}>Route to</p>
                 <p className={`mt-2 ${metaClass} ${chalkClass}`}>
-                  {route.target_role ?? '—'}
+                  {route.target_role ? roleName(route.target_role) : '—'}
                 </p>
               </div>
               <div className={`border-t ${ruleClass} pt-4`}>
@@ -573,7 +575,7 @@ export default function RouteMap({
               </p>
 
               <ol
-                aria-label={`Route stations from ${route.from_skill ?? 'start'} to ${route.target_role ?? 'target'}`}
+                aria-label={`Route stations from ${route.from_skill ?? 'start'} to ${route.target_role ? roleName(route.target_role) : 'target'}`}
                 className="mt-8 flex flex-col @xl:flex-row @xl:items-start"
               >
                 {stations.map((station, index) => {

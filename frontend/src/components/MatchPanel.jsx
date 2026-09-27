@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { runMatch } from '../api.js'
 import { isAbortError } from '../lib/guards.js'
+import { describeSource } from '../lib/sourceLabel.js'
 import {
   bodyClass,
   bodyCopyClass,
@@ -218,9 +219,6 @@ export default function MatchPanel({
                           <span className={`block ${inlineLabelClass}`}>
                             {match.title ?? match.role}
                           </span>
-                          <span className={`mt-1 block ${metaClass} ${smokeClass}`}>
-                            {roleId}
-                          </span>
                         </th>
                         <td className={`${CELL_CLASS} ${chalkClass}`}>{formatScore(match.score)}</td>
                         <td className={`${CELL_CLASS} ${isBlocked ? 'text-danger' : chalkClass}`}>
@@ -272,10 +270,10 @@ export default function MatchPanel({
           </div>
 
           <div className={`mt-6 ${metaRowClass}`}>
-            <span>{`source=${response.source ?? 'unknown'}`}</span>
+            <span>{describeSource(response.source)}</span>
             <span aria-hidden="true">·</span>
             <span>
-              {usesSession ? `passport ${passportId}` : 'baseline passport · no session yet'}
+              {usesSession ? 'Ranked on Kavya’s passport' : 'Ranked on her starting profile · no session yet'}
             </span>
             {hiddenCount > 0 || showAll ? (
               <>

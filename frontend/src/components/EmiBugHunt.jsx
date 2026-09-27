@@ -20,6 +20,7 @@ import {
   sectionHeadingClass,
   smokeClass,
 } from '../styles/classes.js'
+import { describeSource } from '../lib/sourceLabel.js'
 import { Button } from './Button.jsx'
 import Field from './Field.jsx'
 import NumberInput from './NumberInput.jsx'
@@ -326,7 +327,7 @@ export default function EmiBugHunt({ baseUrl = '', sessionId = null, onScored })
               : `Below the credential threshold. ${bugsTotal - bugsFound.length} planted ${bugsTotal - bugsFound.length === 1 ? 'bug is' : 'bugs are'} still hidden.`}
           </p>
           <div className={`mt-6 ${metaRowClass}`}>
-            <span>{`source=${result.source ?? 'unknown'}`}</span>
+            <span>{describeSource(result.source)}</span>
             <span aria-hidden="true">·</span>
             <span>Each reproduction re-run against the planted bugs; no model involved.</span>
           </div>

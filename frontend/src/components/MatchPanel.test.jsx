@@ -80,7 +80,7 @@ describe('MatchPanel', () => {
       },
       expect.objectContaining({ baseUrl: '' }),
     )
-    expect(screen.getByText('baseline passport · no session yet')).toBeInTheDocument()
+    expect(screen.getByText('Ranked on her starting profile · no session yet')).toBeInTheDocument()
   })
 
   it('keeps a blocked role in view with the server reason, not colour alone', async () => {
@@ -109,7 +109,7 @@ describe('MatchPanel', () => {
         expect.anything(),
       ),
     )
-    expect(await screen.findByText('passport passport-session-1')).toBeInTheDocument()
+    expect(await screen.findByText('Ranked on Kavya’s passport')).toBeInTheDocument()
   })
 
   it('re-ranks with the pay-cut opt-in, which is the only way to lift the block', async () => {
