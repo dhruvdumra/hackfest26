@@ -26,7 +26,7 @@ This is a real differential, not a claim. One candidate, two screening models:
 | Screening model | Score | Verdict | Career-gap delta |
 |---|---|---|---|
 | Fair merit | 86 | `PASS` | ±0 |
-| Legacy biased | 94 | **`FLAGGED`** | **+6** |
+| Legacy biased | 91 | **`FLAGGED`** | **+6** |
 
 The biased model scores her **higher** — and that gap is the problem. Eighteen
 months out of work is worth six points to a legacy ATS, and the audit names it.
@@ -66,7 +66,10 @@ Stated plainly, because a judge should not have to guess.
 |---|---|
 | Ghost Twin bias audit | **Real.** Pure Python, deterministic, fully tested |
 | Wage-Scar Guardrail | **Real.** Blocks roles that pay below the candidate's floor |
-| Orchestration, 7 agents | **Real.** LangGraph, with a sequential fallback |
+| Orchestration, 7 agents | **Real.** LangGraph, with a sequential fallback. The run stops at the human gate and waits |
+| Two-Key consent (Kavya) | **Real.** `POST /session/{id}/consent` stores a revocable receipt, labelled `local` |
+| Two-Key sign-off (HR) | **Real** decision on a **fixture** post: stored in SQLite, labelled `simulated` |
+| EMI bug hunt | **Real.** Five planted bugs; every reported reproduction is re-run and graded, labelled `local` |
 | Event streaming | **Real.** WebSocket, replay on reconnect, `Last-Event-ID` resume |
 | Session store | **Real.** SQLite, atomic versioned updates |
 | Skills extraction | SAP AI Core **client written, never executed** — no credential has ever been supplied |
@@ -97,7 +100,7 @@ reason.
    4  inclusive_matching ── vector rank + Wage-Scar Guardrail
    5  employer_readiness ── rewrite the shortlist filter
    6  bias_audit        ── counterfactual twins · PASS | FLAGGED
-   7  two_key_wait      ── human gate, the orchestrator's node, not an agent
+   7  two_key_wait      ── human gate: parks the session in `waiting` until Kavya answers
                                        │
                     ┌──────────────────┴──────────────────┐
                     ▼                                     ▼
@@ -159,39 +162,55 @@ curl http://127.0.0.1:8000/health
 
 ---
 
-## The demo, in four moves
+## The demo, in five steps
 
-1. **Press `RUN PIPELINE`.** The hero is a live agent console, not a video. All
-   seven agents report in real time; the rail fills as each one finishes.
-2. **Read the counter.** In demo mode the run ends at `5/6 agents done`,
-   because the fixture stops Learning Pathway at `waiting_consent` — the human
-   gate — rather than auto-accepting it. Against the real backend the same run
-   reaches `6/6`. Both are honest: one is a fixture that pauses, the other is a
-   server that signs off.
-3. **Scroll to Stage 06 · Bias Audit.** You land on `PASS`, every twin delta at
-   `±0`. That is the control.
-4. **Flip `SIMULATE LEGACY ATS` and re-run.** Same candidate, same score. The
-   verdict goes amber, `max delta 6 > threshold 5`, and the offending rows light
-   up. *This is the moment the project exists for.*
+The page runs in the order the pitch deck promises the jury (slide 9). A
+presenter bar pinned to the bottom names the step on screen and jumps between
+them; the left and right arrow keys do the same.
 
-> **Lead with move 4.** A judge who only presses the default button sees a clean
-> pass and concludes the audit found nothing. The bias is behind a toggle.
+1. **Voice note in.** Press `RUN PIPELINE`. Nothing plays before that. The
+   agent console fills as the seven agents report, and Kavya's Skill Passport
+   lands in step 01.
+2. **Prove it.** The EMI bug hunt: a loan calculator with five planted bugs.
+   Log what looks wrong, or press *Load a recorded hunt* (four bugs, 80/100),
+   and submit. The server re-runs every reproduction; the credential
+   *Defect reproduction* appears on the passport. Leave the fifth bug (a loan
+   of a crore or more) for a judge to find.
+3. **Route and fair match.** The displacement radar, the skill route, and 15
+   ranked roles with the two that cut pay 31–36% **blocked** by the wage-scar
+   guardrail. *Why not me?* on any role gives the reason and the shortest route
+   to qualify.
+4. **Ghost Twins.** You land on `PASS`, every twin delta `±0`. Flip
+   `SIMULATE LEGACY ATS` and re-run: `FLAGGED`, max delta 6 > threshold 5, the
+   career-gap row in red. *This is the moment the project exists for.*
+5. **Two keys.** The run is waiting for Kavya: approve (or decline) sharing her
+   passport, and the receipt lands on the live stream. Then the hiring manager
+   approves the rewritten job post that reaches 12 hidden candidates.
+
+**Demo mode** replays a recording of the backend's own mock-mode run in the
+console and still calls the backend at `http://127.0.0.1:8000` for the panels,
+so run the backend on the presenting laptop. With demo mode off, the console
+streams the real run over the WebSocket.
 
 ---
 
 ## Verification
 
 ```bash
-cd backend  && .venv/Scripts/python -m pytest    # 187 passed
+cd backend  && .venv/Scripts/python -m pytest    # 204 tests
              .venv/Scripts/python -m ruff check .
              .venv/Scripts/python -m mypy
-cd frontend && npm test                          # 116 passed
+cd frontend && npm test                          # 157 passed
              npm run lint && npm run typecheck && npm run build
 ```
 
-**303 tests, all passing.** The suites cover the parts that matter to a judge:
-the audit's threshold boundary, the guardrail's blocking rule, orchestrator
-failures that must not abort a run, and WebSocket replay.
+**361 tests.** The suites cover the parts that matter to a judge: the
+audit's threshold boundary, the guardrail's blocking rule, orchestrator
+failures that must not abort a run, the consent gate, the bug-hunt grader,
+and WebSocket replay. One backend test,
+`test_sap_hana_client_is_unavailable_without_the_hdbcli_driver`, fails
+wherever `hdbcli` is installed, and `pyproject.toml` installs it: the test
+assumes the driver is absent.
 
 ---
 
@@ -203,6 +222,7 @@ failures that must not abort a run, and WebSocket replay.
 | `POST` | `/session/start` | opens a session, returns immediately |
 | `GET` | `/session/{id}` | full state, with replayable event history |
 | `WS` | `/session/{id}/stream` | agent events; `Last-Event-ID` resumes |
+| `POST` | `/session/{id}/consent` | `local` — Kavya approves or revokes; stores a receipt |
 | `POST` | `/audit/ghost-twin` | `local` — the counterfactual audit |
 | `POST` | `/skills/extract` | `simulated` → `live` with SAP credentials |
 | `POST` | `/skills/work-sample` | `simulated` → `live` with SAP credentials |
@@ -210,6 +230,8 @@ failures that must not abort a run, and WebSocket replay.
 | `POST` | `/match` | `simulated` → `live` with SAP HANA |
 | `GET` | `/market/displacement-radar` | `simulated` fixture, with disclaimer |
 | `POST` | `/employer/rewrite-filter` | `simulated` fixture, with disclaimer |
+| `POST` | `/employer/rewrite-filter/{id}/decision` | hiring manager approves or rejects; stored |
+| `GET` | `/employer/rewrite-filter/{id}/decision` | the latest decision, or 404 |
 
 ---
 
@@ -229,7 +251,8 @@ backend/
   app/api/                 12 endpoints
   tests/                   187 tests
 frontend/
-  src/components/          AgentConsole · GhostTwinPanel · PipelineAgentGrid
+  src/components/          AgentConsole · GhostTwinPanel · MatchPanel · EmiBugHunt
+                           ConsentCard · HiringDecision · PresenterBar
   src/pages/               WorkerApp · RouteMap · HRConsole
   src/styles/tokens.css    the design tokens, and why each value is what it is
 ReRoute_PRD.md              product requirements
@@ -241,8 +264,12 @@ ReRoute_Style_Reference.md the ported design system
 - **No SAP credential has ever been supplied.** The AI Core and HANA clients have
   never run against a live service. They are guarded by mock flags, and the
   resilience suite proves the *fallbacks*, not the live responses.
-- The browser WebSocket path needs demo mode off to be reachable. Rehearse that
-  toggle before presenting.
+- Demo mode forces the panels to `http://127.0.0.1:8000`, so a deployed
+  frontend in demo mode needs a backend on the presenting machine. Rehearse
+  with the same laptop.
+- `learning_pathway.py` calls `graph.shortest_path`, which networkx does not
+  have, so every route falls back to the built-in Dijkstra (same answer, a
+  logged traceback).
 - Role embeddings come from a deterministic hashing embedder, not a model.
 - `.gitignore` does not ignore `.env`. Add that rule before creating one, and
   check `git status` before committing. Any `VITE_`-prefixed variable is inlined
