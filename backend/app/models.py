@@ -241,6 +241,11 @@ class DisplacementRadarResponse(APIModel):
 
 class EmployerFilterRewriteRequest(APIModel):
     job_post_id: str = Field(min_length=1, max_length=120)
+    # The audit that motivates the rewrite. Optional so a caller can still ask
+    # for a generic cleanup, but the orchestrator always supplies it: a rewrite
+    # that is not derived from a finding cannot answer "what changed?" — and
+    # that question is the one a reviewer asks first.
+    audit_result: GhostTwinResult | None = None
 
 
 class EmployerFilterRewriteResponse(APIModel):
@@ -253,8 +258,16 @@ class EmployerFilterRewriteResponse(APIModel):
     removed_criteria: list[str]
     hidden_talent_count: int = Field(ge=0)
     rewrite_reason: str
-    source: Literal["simulated"] = "simulated"
+    source: Literal["live", "simulated"] = "simulated"
     disclaimer: str
+    # The audit deltas the rewrite was derived from, so a reader can check the
+    # rewrite against the finding rather than taking it on trust. Empty when the
+    # caller asked for a generic cleanup with no audit attached.
+    audit_attributes: list[GhostTwinAttribute] = Field(default_factory=list)
+    # True when the rewrite was generated from the supplied audit rather than
+    # served from the bundled fixture. This is the claim a judge will test, so
+    # it is explicit in the payload instead of implied by the text.
+    derived_from_audit: bool = False
 
 
 class SessionState(APIModel):

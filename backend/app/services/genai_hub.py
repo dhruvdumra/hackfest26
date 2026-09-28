@@ -170,6 +170,22 @@ def _orchestration_payload(
 
 
 def _post_orchestration(payload: dict[str, Any], settings: Settings) -> Any:
+    return post_orchestration(payload, settings)
+
+
+def post_orchestration(payload: dict[str, Any], settings: Settings) -> Any:
+    """Send one orchestration request to the SAP Generative AI Hub.
+
+    Public because a second caller now shares it: the Employer Readiness filter
+    rewrite in ``app/services/employer_rewrite.py`` talks to the same endpoint
+    with the same credentials and the same timeout. Keeping one function for
+    "how do we reach the Hub" is the point — if the auth shape or the timeout
+    changes, both callers change together instead of drifting apart.
+
+    Raises RuntimeError when the live configuration is incomplete, and
+    httpx.HTTPError when the call itself fails. Callers are expected to degrade
+    to a labelled fixture rather than let either propagate.
+    """
     _require_live_configuration(settings)
     auth = httpx.BasicAuth(
         settings.genai_hub_client_id,

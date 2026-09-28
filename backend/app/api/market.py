@@ -2,13 +2,15 @@ from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.mocks import employer_fixtures, market_fixtures
+from app.api.dependencies import SettingsDependency
+from app.mocks import market_fixtures
 from app.models import (
     ROLE_QUERY_MAX_LENGTH,
     DisplacementRadarResponse,
     EmployerFilterRewriteRequest,
     EmployerFilterRewriteResponse,
 )
+from app.services import employer_rewrite
 
 router = APIRouter(tags=["market", "employer"])
 
@@ -37,26 +39,33 @@ def displacement_radar(
 )
 def rewrite_filter(
     request: EmployerFilterRewriteRequest,
+    settings: SettingsDependency,
 ) -> EmployerFilterRewriteResponse:
-    post = employer_fixtures.JOB_POSTS_BY_ID.get(request.job_post_id)
-    if post is None:
-        known = ", ".join(sorted(employer_fixtures.JOB_POSTS_BY_ID))
+    """Rewrite a job post's filter, ideally from the audit that flagged it.
+
+    When ``audit_result`` is supplied and carries a non-zero delta, the rewrite
+    is derived from that finding: the model is told which attributes actually
+    cost the candidate points and asked to remove that wording. The response
+    then carries ``source="live"`` and ``derived_from_audit=True``.
+
+    Without an audit, or with an audit that found nothing, there is no finding to
+    act on, so the bundled fixture answers and says ``derived_from_audit=False``.
+    That flag is the honest one: the fixture text happens to read well, but it
+    was not produced by this request, and a reviewer checking the payload should
+    be able to see that without reading prose.
+    """
+    try:
+        rewrite = employer_rewrite.rewrite_filter(
+            request.job_post_id,
+            settings=settings,
+            audit_result=request.audit_result,
+        )
+    except employer_rewrite.EmployerRewriteUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"unknown job_post_id; expected one of: {known}",
-        )
-    return EmployerFilterRewriteResponse(
-        job_post_id=post["post_id"],
-        role=post["role"],
-        city=post["city"],
-        filter_text_before=post["filter_text_before"],
-        filter_text_after=post["filter_text_after"],
-        restrictive_phrase=post["restrictive_phrase"],
-        removed_criteria=list(post["removed_criteria"]),
-        hidden_talent_count=post["hidden_talent_count"],
-        rewrite_reason=post["rewrite_reason"],
-        disclaimer=employer_fixtures.DISCLAIMER,
-    )
+            detail=str(error),
+        ) from error
+    return EmployerFilterRewriteResponse(**rewrite)
 
 
 def _radar_entry(role: str, city: str) -> dict[str, Any]:

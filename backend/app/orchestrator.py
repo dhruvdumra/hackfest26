@@ -43,7 +43,7 @@ inventing one.
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -75,7 +75,7 @@ from app.models import (
     SkillExtractionResponse,
     SkillPassport,
 )
-from app.services import genai_hub, inclusive_matching, learning_pathway
+from app.services import employer_rewrite, genai_hub, inclusive_matching, learning_pathway
 from app.storage.session_store import (
     SessionNotFoundError,
     SessionStore,
@@ -537,12 +537,42 @@ async def _inclusive_matching(state: OrchestrationState) -> OrchestrationState:
 
 
 async def _employer_readiness(state: OrchestrationState) -> OrchestrationState:
+    """Rewrite the employer's filter, from an audit finding when one exists.
+
+    Two facts about this node are easy to get wrong, so they are stated here
+    rather than left for the next reader to discover.
+
+    **One: the node runs BEFORE ``bias_audit``.** It is fifth in ``NODE_ORDER``;
+    the audit is sixth. So during an orchestrated run there is no session audit
+    to derive from yet, and this node falls back to the bundled rewrite.
+
+    **Two: even after reordering, it would still have nothing to act on.** The
+    orchestrator calls ``run_ghost_twin_audit`` without ``simulate_legacy_ats``,
+    so it audits the *fair* model — which is the correct default, and produces
+    every delta at zero and a ``PASS`` verdict every time. A clean audit has no
+    penalised attribute, and a rewrite invented from nothing would be the model
+    deciding a post is biased on its own opinion, which is precisely the
+    judgement this product refuses to delegate.
+
+    So the orchestrated node stays on the fixture by design, and the *endpoint*
+    is where derivation happens: ``POST /employer/rewrite-filter`` accepts an
+    ``audit_result`` and derives the rewrite from its non-zero deltas. That is
+    the path the demo drives, because it is the one where a biased screen has
+    actually been measured first.
+
+    Either way the emitted event carries ``derived_from_audit``, so a consumer
+    can tell which of the two produced the text without reading prose.
+    """
     emitter = state["emitter"]
+    settings = state["settings"]
     store = state["store"]
     session_id = state["session_id"]
     city = state.get("city", DEFAULT_CITY)
     matches = state.get("matches", [])
     role = matches[0].role if matches else state.get("target_role", DEFAULT_TARGET_ROLE)
+    # Unreachable during an orchestrated run, per the note above. Read anyway so
+    # that a future reordering starts working rather than silently doing nothing.
+    audit = state.get("audit")
     try:
         await emitter.emit(
             agent="EMPLOYER READINESS",
@@ -551,21 +581,86 @@ async def _employer_readiness(state: OrchestrationState) -> OrchestrationState:
             data={"phase": "employer_readiness", "role": role},
             source="simulated",
         )
-        brief = employer_readiness_brief(role, city)
+        brief = _rewrite_brief_for(audit, settings, role=role, city=city)
         await _update_session(store, session_id, state_entry=("employer_readiness", brief))
+        derived = bool(brief.get("derived_from_audit"))
         await emitter.emit(
             agent="EMPLOYER READINESS",
             status="done",
             message=(
                 f"{brief['hidden_talent_count']} previously hidden candidates surfaced"
                 f" across {brief['post_count']} rewritten posts"
+                + (" · derived from the bias audit" if derived else "")
             ),
-            data={"phase": "employer_readiness", "source": "simulated", "brief": brief},
-            source="simulated",
+            data={
+                "phase": "employer_readiness",
+                "source": brief.get("source", "simulated"),
+                "derived_from_audit": derived,
+                "brief": brief,
+            },
+            source=brief.get("source", "simulated"),
         )
         return {**state, "employer": brief}
     except Exception as error:
         return await _record_failure(state, "EMPLOYER READINESS", error)
+
+
+def _rewrite_brief_for(
+    audit: GhostTwinResult | None,
+    settings: Settings,
+    *,
+    role: str,
+    city: str,
+) -> dict[str, Any]:
+    """Ask the rewrite service for every bundled post this role covers.
+
+    The endpoint rewrites one post; the node reports a city-wide brief. Both go
+    through the same service so the live and simulated paths cannot disagree, and
+    a per-post failure degrades that post to its fixture rather than failing the
+    node.
+    """
+    brief = employer_readiness_brief(role, city)
+    posts = brief.get("posts")
+    if not isinstance(posts, list) or audit is None:
+        return brief
+
+    rewritten: list[JsonValue] = []
+    for post in posts:
+        if not isinstance(post, Mapping):
+            continue
+        post_id = post.get("post_id")
+        if not isinstance(post_id, str):
+            continue
+        try:
+            rewritten.append(
+                employer_rewrite.rewrite_filter(
+                    post_id,
+                    settings=settings,
+                    audit_result=audit,
+                )
+            )
+        except Exception:
+            logger.warning(
+                "the filter rewrite for %s failed; keeping the bundled post",
+                post_id,
+                exc_info=True,
+            )
+
+    if not rewritten:
+        return brief
+    return {
+        **brief,
+        "posts": rewritten,
+        "source": (
+            "live"
+            if all(isinstance(post, Mapping) and post.get("source") == "live" for post in rewritten)
+            else "simulated"
+        ),
+        "derived_from_audit": all(
+            isinstance(post, Mapping) and post.get("derived_from_audit") is True
+            for post in rewritten
+        ),
+    }
 
 
 async def _bias_audit(state: OrchestrationState) -> OrchestrationState:
