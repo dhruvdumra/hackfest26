@@ -109,6 +109,12 @@ def run_query(
             cursor.execute(sql)
         else:
             cursor.execute(sql, parameters)
+        # A statement that returns no result set -- DELETE, INSERT, the schema
+        # replay -- leaves hdbcli with a cursor whose fetchall() raises
+        # (0, 'No result set'). Description is None in exactly that case, so
+        # check it instead of assuming every executed statement yields rows.
+        if cursor.description is None:
+            return []
         rows = cursor.fetchall() or []
         columns = _column_names(cursor)
         return [_row_mapping(columns, row) for row in rows]

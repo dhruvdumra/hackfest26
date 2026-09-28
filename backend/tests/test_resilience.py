@@ -743,6 +743,57 @@ def test_hana_ping_reports_a_dead_connection_instead_of_raising() -> None:
     )
 
 
+class ResultlessHanaCursor:
+    """A cursor for a statement that returns no result set, as hdbcli reports it.
+
+    DELETE, INSERT and the schema replay all leave ``description`` as None, and
+    calling ``fetchall()`` on that cursor raises (0, 'No result set'). The
+    wrapper used to call fetchall() unconditionally, so every non-SELECT through
+    hana_client.run_query raised -- which is why seeding ROLE_EMBEDDINGS could
+    never get past its first DELETE.
+    """
+
+    def __init__(self) -> None:
+        self.description: None = None
+        self.closed = False
+
+    def execute(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    def fetchall(self) -> list[Any]:
+        raise RuntimeError("(0, 'No result set')")
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class ResultlessHanaConnection:
+    def __init__(self) -> None:
+        self.last_cursor = ResultlessHanaCursor()
+
+    def cursor(self) -> Any:
+        return self.last_cursor
+
+    def reconnect(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+
+def test_run_query_returns_no_rows_for_a_statement_with_no_result_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = ResultlessHanaConnection()
+    monkeypatch.setattr(hana_client, "set_connection", lambda _connection: None)
+    monkeypatch.setattr(hana_client, "get_connection", lambda _settings: connection)
+    settings = unreachable_sap_settings(UNUSED_DATABASE_PATH)
+
+    assert hana_client.run_query(settings, "DELETE FROM ROLE_EMBEDDINGS") == []
+    assert hana_client.run_scalar(settings, "DELETE FROM ROLE_EMBEDDINGS") is None
+    assert connection.last_cursor.closed is True
+
+
 def test_sap_hana_client_is_unavailable_without_the_hdbcli_driver(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

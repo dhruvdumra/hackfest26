@@ -61,9 +61,18 @@ CREATE GRAPH WORKSPACE SKILLS_GRAPH
 -- Role embeddings for inclusive matching, written by the configured encoder
 -- (the offline hashing embedder by default, MiniLM when REROUTE_EMBEDDING_BACKEND
 -- selects it). ROLE_ID is the primary key so scripts/seed_role_embeddings.py can
--- upsert one row per role.
+-- write one row per role.
+--
+-- ROLE_ID is NVARCHAR(32), not the NVARCHAR(20) this file originally declared.
+-- Measured against the live 2026.14 instance: the seed died with [274]
+-- "inserted value too large for column" on the third role,
+-- `qa-automation-engineer` (22 chars). The catalogue's two longest ids are
+-- `performance-test-engineer` and `manual-testing-technician`, both 25 chars,
+-- so 20 was never wide enough and 32 clears the catalogue with room to spare.
+-- Widen an existing table with:
+--   ALTER TABLE ROLE_EMBEDDINGS ALTER (ROLE_ID NVARCHAR(32));
 CREATE COLUMN TABLE ROLE_EMBEDDINGS (
-  ROLE_ID NVARCHAR(20) PRIMARY KEY,
+  ROLE_ID NVARCHAR(32) PRIMARY KEY,
   EMBEDDING REAL_VECTOR(384)
 );
 

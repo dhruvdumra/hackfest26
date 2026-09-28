@@ -8,3 +8,9 @@ data/
 .env
 .env.*
 !.env.example
+
+# Written by scripts/seed_role_embeddings.py when SAP HANA is unreachable.
+# Generated output, not source: the same vectors are recomputed in process by
+# embedding_provider when this file is absent, so a stale copy in the tree
+# would only ever disagree with the live table.
+app/mocks/role_embeddings.json

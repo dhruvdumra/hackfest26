@@ -27,6 +27,7 @@ Scoring policy, applied identically in the live and the simulated pathway:
 
 import json
 import logging
+import struct
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,6 +59,11 @@ HOURS_PENALTY: Final[float] = 0.12
 LANGUAGE_PENALTY: Final[float] = 0.20
 SIMILARITY_PRECISION: Final[int] = 4
 SCORE_PRECISION: Final[int] = 4
+# REAL_VECTOR wire format as the hdbcli client returns it: a 4-byte
+# little-endian int32 dimension count, then that many little-endian float32
+# values. See _decode_hana_vector for the measurement behind these numbers.
+_VECTOR_HEADER_BYTES: Final[int] = 4
+_VECTOR_ITEM_BYTES: Final[int] = 4
 GUARDRAIL_REASON: Final[str] = (
     "Pay cut of {pay_cut:.1f}% exceeds the {threshold:.0f}% wage-scar guardrail"
 )
@@ -354,8 +360,15 @@ def _row_profile(
 
 
 def _hana_vector_literal(vector: Sequence[float]) -> str:
-    """Render an embedding as the plain decimal literal TO_REAL_VECTOR accepts."""
-    return ",".join(f"{float(value):.6f}" for value in vector)
+    """Render an embedding as the string SAP HANA's TO_REAL_VECTOR accepts.
+
+    The literal is a bracketed comma list, not a bare one -- see
+    ``embedding_provider.hana_vector_literal``, which the seed script shares
+    with this. A bracketless string raises 1920 "Invalid vector format" on the
+    live instance, which would silently push every /match request back onto the
+    simulated pathway.
+    """
+    return embedding_provider.hana_vector_literal(vector)
 
 
 def _require_value(lookup: Mapping[str, Any], column: str, index: int) -> Any:
@@ -373,6 +386,8 @@ def _require_float(lookup: Mapping[str, Any], column: str, index: int) -> float:
 
 def _require_sequence(lookup: Mapping[str, Any], column: str, index: int) -> list[Any]:
     value = _require_value(lookup, column, index)
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return _decode_hana_vector(value, column, index)
     if isinstance(value, str):
         try:
             parsed = json.loads(value)
@@ -384,6 +399,39 @@ def _require_sequence(lookup: Mapping[str, Any], column: str, index: int) -> lis
     if isinstance(value, Sequence):
         return list(value)
     raise ValueError(f"row {index} holds an unreadable {column.upper()} column")
+
+
+def _decode_hana_vector(
+    value: bytes | bytearray | memoryview,
+    column: str,
+    index: int,
+) -> list[float]:
+    """Decode a REAL_VECTOR column the hdbcli client returns as raw binary.
+
+    HANA does not hand back a list or a JSON string. hdbcli returns a
+    memoryview: a 4-byte LITTLE-ENDIAN int32 holding the dimension count, then
+    that many little-endian float32 values. For a 384-dimension vector that is
+    1540 bytes -- 4 + 384*4. Measured against the Hackfest 2026 HANA Cloud
+    trial instance, release 2026.14, where the first 4 bytes read as exactly
+    384 and the following 384 floats are L2 normalized to 1.0.
+
+    Treating this buffer as a sequence of bytes is what made /match report
+    1540 dimensions and fall back to the simulated pathway, so the length is
+    read from the header rather than from len().
+    """
+    raw = bytes(value)
+    if len(raw) < _VECTOR_HEADER_BYTES:
+        raise ValueError(
+            f"row {index} holds a {column.upper()} buffer too short to carry a header"
+        )
+    (dimensions,) = struct.unpack_from("<i", raw, 0)
+    expected = _VECTOR_HEADER_BYTES + dimensions * _VECTOR_ITEM_BYTES
+    if dimensions <= 0 or len(raw) < expected:
+        raise ValueError(
+            f"row {index} holds a {column.upper()} buffer of {len(raw)} bytes "
+            f"that cannot hold {dimensions} float32 values"
+        )
+    return list(struct.unpack_from(f"<{dimensions}f", raw, _VECTOR_HEADER_BYTES))
 
 
 def _require_skills(lookup: Mapping[str, Any], index: int) -> list[str]:

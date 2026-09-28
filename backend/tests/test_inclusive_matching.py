@@ -1,5 +1,6 @@
 import asyncio
 import json
+import struct
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -117,6 +118,31 @@ def test_the_seed_script_writes_exactly_where_the_matcher_reads() -> None:
     import scripts.seed_role_embeddings as seed_script
 
     assert seed_script.ROLE_EMBEDDINGS_PATH is inclusive_matching.ROLE_EMBEDDINGS_PATH
+
+
+def test_the_seed_script_never_issues_an_upsert() -> None:
+    """HANA's UPSERT is REPLACE, so a loop of them collapses the table to one row.
+
+    Measured on the Hackfest 2026 trial instance: three consecutive UPSERTs left
+    exactly one row -- the last one written -- while every statement reported
+    success. The seed is DELETE then one INSERT per role, and the count is
+    verified afterwards rather than assumed.
+    """
+    import scripts.seed_role_embeddings as seed_script
+
+    statements = [
+        seed_script.DELETE_ROLE_EMBEDDINGS_SQL,
+        seed_script.INSERT_ROLE_EMBEDDING_SQL,
+        seed_script.INSERT_WIDE_ROLE_EMBEDDING_SQL,
+        seed_script.COUNT_ROLE_EMBEDDINGS_SQL,
+    ]
+    for statement in statements:
+        assert "UPSERT" not in statement.upper(), statement
+        assert "REPLACE" not in statement.upper(), statement
+    # One row per statement: HANA rejects a multi-row VALUES list.
+    assert statements[0].count("VALUES") == 0
+    assert statements[1].count("VALUES") == 1
+    assert statements[2].count("VALUES") == 1
 
 
 def test_guardrail_blocks_a_pay_cut_the_candidate_did_not_accept(settings: Settings) -> None:
@@ -517,3 +543,90 @@ def _match_for(response: MatchResponse, role_id: str) -> RankedMatch:
         if candidate.role_id == role_id:
             return candidate
     raise AssertionError(f"{role_id} is missing from the ranking")
+
+
+def hana_vector_blob(vector: list[float]) -> memoryview:
+    """Encode a vector the way the hdbcli client returns a REAL_VECTOR column.
+
+    This is the real wire format, not a convenience: hdbcli hands back a
+    memoryview of a 4-byte little-endian int32 dimension count followed by that
+    many little-endian float32 values -- 1540 bytes for a 384-dimension vector.
+    Measured against the Hackfest 2026 HANA Cloud trial instance, where the
+    first four bytes read as exactly 384 and the rest decoded to an L2
+    normalized vector.
+    """
+    body = struct.pack(f"<{len(vector)}f", *vector)
+    return memoryview(struct.pack("<i", len(vector)) + body)
+
+
+def binary_live_rows() -> list[dict[str, Any]]:
+    """Live rows shaped the way HANA actually returns them."""
+    return [
+        {**row, "EMBEDDING": hana_vector_blob(row["EMBEDDING"])}
+        for row in live_rows()
+    ]
+
+
+def test_a_real_vector_column_survives_the_live_match(
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live path must read HANA's binary REAL_VECTOR, not just a Python list.
+
+    The stub above returns a plain list, which is why the suite stayed green
+    while every real /match request fell back to the simulated pathway: the
+    client returns binary, and a memoryview of 1540 bytes is not 384
+    dimensions.
+    """
+    use_hana_stub(monkeypatch, run_query=lambda *_args, **_kwargs: binary_live_rows())
+
+    response = inclusive_matching.match(
+        settings, KAVYA_SKILLS, candidate_annual_pay=CANDIDATE_ANNUAL_PAY
+    )
+
+    assert response.source == "live"
+    assert {candidate.source for candidate in response.matches} == {"live"}
+    assert len(response.matches) == len(ROLE_PROFILES)
+    # The guardrail must still bite on the live path, not only in the fixture.
+    blocked = {
+        candidate.role_id for candidate in response.matches if candidate.blocked_by_guardrail
+    }
+    assert LOW_PAY_ROLE_ID in blocked
+    assert _match_for(response, LOW_PAY_ROLE_ID).guardrail_reason == GUARDRAIL_REASON
+
+
+def test_a_live_vector_that_is_too_short_raises_rather_than_guessing(
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A truncated buffer is a broken row, so the request degrades to simulated."""
+    rows = binary_live_rows()
+    rows[0]["EMBEDDING"] = memoryview(bytes(rows[0]["EMBEDDING"])[:-8])
+    use_hana_stub(monkeypatch, run_query=lambda *_args, **_kwargs: rows)
+
+    response = inclusive_matching.match(
+        settings, KAVYA_SKILLS, candidate_annual_pay=CANDIDATE_ANNUAL_PAY
+    )
+
+    assert response.source == "simulated"
+    assert {candidate.source for candidate in response.matches} == {"simulated"}
+
+
+def test_the_hana_vector_literal_is_bracketed(settings: Settings) -> None:
+    """TO_REAL_VECTOR rejects a bracketless comma list with [1920].
+
+    Measured on the Hackfest trial instance: seeding ROLE_EMBEDDINGS failed with
+    "Expected '[', but found '0.000000'" until the literal was bracketed, and
+    the COSINE_SIMILARITY query binds the same shape.
+    """
+    vector = embedding_provider.embed_text("Regression testing")
+    literal = embedding_provider.hana_vector_literal(vector)
+
+    assert literal.startswith("[")
+    assert literal.endswith("]")
+    assert literal.count(",") == len(vector) - 1
+    assert [float(part) for part in literal[1:-1].split(",")] == pytest.approx(
+        vector, abs=5e-7
+    )
+    # The matcher and the seed script must never format their own string.
+    assert inclusive_matching._hana_vector_literal(vector) == literal

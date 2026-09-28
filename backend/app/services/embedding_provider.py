@@ -124,6 +124,23 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
     return max(-1.0, min(1.0, dot / (left_norm * right_norm)))
 
 
+def hana_vector_literal(vector: Sequence[float]) -> str:
+    """Render an embedding as the string SAP HANA's TO_REAL_VECTOR accepts.
+
+    The literal is a BRACKETED comma list, ``[0.1,-0.2,0.3]``. The bracket is
+    not optional: TO_REAL_VECTOR raises 1920 "Invalid vector format ... Expected
+    '[', but found '0.100000'" on a bare comma list. Measured against the
+    Hackfest 2026 HANA Cloud trial instance, release 2026.14 -- the first
+    attempt at seeding ROLE_EMBEDDINGS failed on exactly this, and so would the
+    COSINE_SIMILARITY query, which passes its candidate vector to the same
+    function.
+
+    Both the seed script and the matcher bind a parameter this way, so they
+    share this function rather than each formatting its own string.
+    """
+    return "[" + ",".join(f"{float(value):.6f}" for value in vector) + "]"
+
+
 @lru_cache(maxsize=1)
 def _load_model() -> Any | None:
     """Load sentence-transformers once, or return None when it is unusable."""

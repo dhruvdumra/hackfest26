@@ -6,17 +6,29 @@ or from ``backend`` with ``python scripts/seed_role_embeddings.py``. Pass
 
 The script never needs a model download and never needs SAP HANA: it embeds the
 role catalogue with the offline hashing embedder, and when HANA is configured
-and reachable it upserts one row per role into ``ROLE_EMBEDDINGS`` and then
+and reachable it writes one row per role into ``ROLE_EMBEDDINGS`` and then
 verifies the row count with ``hana_client.run_scalar``. When HANA is missing or
 rejects the statement it logs a warning and writes
 ``ROLE_EMBEDDINGS_PATH`` instead, which is the file
 ``app.services.inclusive_matching`` reads for its simulated pathway. That path is
 owned by the application module and imported from it, so the two cannot drift.
 
+HANA gotchas this script is written around, both measured on the Hackfest 2026
+trial instance (release 2026.14) rather than taken from the manual:
+
+* ``UPSERT`` is ``REPLACE`` on HANA. It deletes every row whose key the
+  statement does not match and then inserts, so a loop of 15 upserts leaves
+  exactly one row -- the last one written -- while reporting success every
+  time. Seeding is therefore ``DELETE FROM ROLE_EMBEDDINGS`` followed by one
+  ``INSERT`` per role.
+* No multi-row ``VALUES`` list, ever, in an ``INSERT`` or an ``UPSERT``. One
+  statement per row is the only shape HANA accepts here.
+
 ``init_hana_schema.sql`` creates ``ROLE_EMBEDDINGS`` with ``ROLE_ID`` and
-``EMBEDDING`` only, so the wide upsert is tried first and the two-column upsert
-is used when the role attribute columns do not exist yet. Embeddings are bound
-as the plain decimal literal that ``REAL_VECTOR`` columns accept.
+``EMBEDDING`` only. The insert shape is chosen by reading the live column list
+from ``SYS.TABLE_COLUMNS`` rather than by catching an error, because a failed
+statement is exactly what hides the row loss above. Embeddings are bound as the
+plain decimal literal that ``REAL_VECTOR`` columns accept.
 """
 
 import argparse
@@ -40,8 +52,28 @@ __all__ = ["ROLE_EMBEDDINGS_PATH", "main"]
 
 logger = logging.getLogger("scripts.seed_role_embeddings")
 
-UPSERT_ROLE_EMBEDDING_SQL = """
-UPSERT ROLE_EMBEDDINGS (
+DELETE_ROLE_EMBEDDINGS_SQL = "DELETE FROM ROLE_EMBEDDINGS"
+COUNT_ROLE_EMBEDDINGS_SQL = "SELECT COUNT(*) FROM ROLE_EMBEDDINGS"
+# The insert shape is read from the live table, never guessed by catching an
+# error: a rejected UPSERT on HANA is how rows go missing, so the column list
+# is the thing to check up front.
+ROLE_EMBEDDING_COLUMNS_SQL = """
+SELECT COLUMN_NAME
+FROM SYS.TABLE_COLUMNS
+WHERE SCHEMA_NAME = CURRENT_SCHEMA AND TABLE_NAME = 'ROLE_EMBEDDINGS'
+ORDER BY POSITION
+"""
+INSERT_ROLE_EMBEDDING_SQL = """
+INSERT INTO ROLE_EMBEDDINGS (
+    ROLE_ID,
+    EMBEDDING
+) VALUES (
+    :role_id,
+    TO_REAL_VECTOR(:embedding)
+)
+"""
+INSERT_WIDE_ROLE_EMBEDDING_SQL = """
+INSERT INTO ROLE_EMBEDDINGS (
     ROLE_ID,
     TITLE,
     CITY,
@@ -60,13 +92,23 @@ UPSERT ROLE_EMBEDDINGS (
     :weekly_hours,
     :annual_pay,
     :required_skills,
-    :embedding
+    TO_REAL_VECTOR(:embedding)
 )
 """
-COUNT_ROLE_EMBEDDINGS_SQL = "SELECT COUNT(*) FROM ROLE_EMBEDDINGS"
-UPSERT_ROLE_EMBEDDING_FALLBACK_SQL = """
-UPSERT ROLE_EMBEDDINGS (ROLE_ID, EMBEDDING) VALUES (:role_id, :embedding)
-"""
+# Column set of the two-column table init_hana_schema.sql creates. A live table
+# holding all of these also gets the role attributes written alongside each
+# vector, which is what inclusive_matching's wide query reads.
+WIDE_ROLE_COLUMNS: frozenset[str] = frozenset(
+    {
+        "TITLE",
+        "CITY",
+        "LANGUAGE",
+        "COMMUTE_KM",
+        "WEEKLY_HOURS",
+        "ANNUAL_PAY",
+        "REQUIRED_SKILLS",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,8 +189,15 @@ def seed(overrides: dict[str, Any] | None = None, regenerate: bool = False) -> S
     embeddings = build_role_embeddings()
     if hana_client.is_available(settings):
         try:
-            _upsert_roles(settings, embeddings)
+            _insert_roles(settings, embeddings)
             row_count = hana_client.run_scalar(settings, COUNT_ROLE_EMBEDDINGS_SQL)
+            if row_count is None or int(row_count) != len(embeddings):
+                # Do not let a lossy seed report itself as a success. This is
+                # the check that would have caught the UPSERT-as-REPLACE
+                # collapse on the first run instead of the second.
+                raise RuntimeError(
+                    f"ROLE_EMBEDDINGS holds {row_count} rows, expected {len(embeddings)}"
+                )
             logger.info("seeded %d role embeddings into SAP HANA", len(embeddings))
             return SeedSummary(
                 mode="live",
@@ -156,11 +205,11 @@ def seed(overrides: dict[str, Any] | None = None, regenerate: bool = False) -> S
                 dimensions=dimensions,
                 backend=backend,
                 destination="ROLE_EMBEDDINGS",
-                hana_row_count=int(row_count) if row_count is not None else None,
+                hana_row_count=int(row_count),
             )
         except Exception:
             logger.warning(
-                "the SAP HANA role embedding upsert failed; seeding the local JSON file instead",
+                "the SAP HANA role embedding seed failed; seeding the local JSON file instead",
                 exc_info=True,
             )
     destination = write_role_embeddings(embeddings)
@@ -201,44 +250,56 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def _upsert_roles(settings: Any, embeddings: dict[str, list[float]]) -> None:
-    """Upsert every role, falling back to the two-column table when needed."""
+def _insert_roles(settings: Any, embeddings: dict[str, list[float]]) -> None:
+    """Replace the ROLE_EMBEDDINGS contents with one row per role.
+
+    DELETE then INSERT, never UPSERT: on HANA UPSERT is REPLACE, so a loop of
+    one upsert per role collapses the table to a single row and still reports
+    success for every statement. Measured on the Hackfest trial instance --
+    3 upserts left 1 row. The delete also makes --regenerate idempotent.
+    """
     from app.mocks.role_fixtures import ROLE_PROFILES_BY_ID
     from app.services import hana_client
 
-    wide = {
-        role_id: {
-            "role_id": ROLE_PROFILES_BY_ID[role_id].role_id,
-            "title": ROLE_PROFILES_BY_ID[role_id].title,
-            "city": ROLE_PROFILES_BY_ID[role_id].city,
-            "language": ROLE_PROFILES_BY_ID[role_id].language,
-            "commute_km": ROLE_PROFILES_BY_ID[role_id].commute_km,
-            "weekly_hours": ROLE_PROFILES_BY_ID[role_id].weekly_hours,
-            "annual_pay": ROLE_PROFILES_BY_ID[role_id].annual_pay,
-            "required_skills": json.dumps(ROLE_PROFILES_BY_ID[role_id].required_skills),
+    columns = {
+        str(row.get("COLUMN_NAME", row.get("column_name", ""))).upper()
+        for row in hana_client.run_query(settings, ROLE_EMBEDDING_COLUMNS_SQL)
+    }
+    if not columns:
+        raise RuntimeError("ROLE_EMBEDDINGS has no columns; did init_hana_schema.sql run?")
+    wide = WIDE_ROLE_COLUMNS.issubset(columns)
+    logger.info("ROLE_EMBEDDINGS columns: %s", ", ".join(sorted(columns)))
+
+    hana_client.run_query(settings, DELETE_ROLE_EMBEDDINGS_SQL)
+    for role_id, vector in embeddings.items():
+        profile = ROLE_PROFILES_BY_ID[role_id]
+        parameters: dict[str, Any] = {
+            "role_id": profile.role_id,
             "embedding": _vector_literal(vector),
         }
-        for role_id, vector in embeddings.items()
-    }
-    try:
-        for parameters in wide.values():
-            hana_client.run_query(settings, UPSERT_ROLE_EMBEDDING_SQL, parameters)
-        return
-    except Exception:
-        logger.info(
-            "ROLE_EMBEDDINGS has no role attribute columns; seeding ROLE_ID and EMBEDDING only",
-            exc_info=True,
-        )
-    for role_id, vector in embeddings.items():
+        if wide:
+            parameters.update(
+                {
+                    "title": profile.title,
+                    "city": profile.city,
+                    "language": profile.language,
+                    "commute_km": profile.commute_km,
+                    "weekly_hours": profile.weekly_hours,
+                    "annual_pay": profile.annual_pay,
+                    "required_skills": json.dumps(profile.required_skills),
+                }
+            )
         hana_client.run_query(
             settings,
-            UPSERT_ROLE_EMBEDDING_FALLBACK_SQL,
-            {"role_id": role_id, "embedding": _vector_literal(vector)},
+            INSERT_WIDE_ROLE_EMBEDDING_SQL if wide else INSERT_ROLE_EMBEDDING_SQL,
+            parameters,
         )
 
 
 def _vector_literal(vector: Sequence[float]) -> str:
-    return ",".join(f"{value:.{EMBEDDING_PRECISION}f}" for value in vector)
+    from app.services import embedding_provider
+
+    return embedding_provider.hana_vector_literal(vector)
 
 
 def _rounded(vector: Sequence[float]) -> list[float]:
