@@ -30,7 +30,7 @@ from app.services import genai_hub
 AUTH_URL = "https://tenant.authentication.eu10.hana.ondemand.com"
 ENDPOINT = "https://api.example.test/v1/inference/deployments/dep/chat/completions"
 RESOURCE_GROUP = "default"
-ACCESS_TOKEN = "eyJhbGciOiJFUzM4NCJ9.eyJzdWIiOiJ0cmlhbCJ9.c2lnbmF0dXJl"
+ACCESS_TOKEN = "this-is-not-a-real-token-000000000000"
 EXTRACTION = {"skills": [{"name": "Regression testing", "confidence": 0.9}], "needs_proof": []}
 
 
