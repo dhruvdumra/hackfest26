@@ -26,6 +26,20 @@ class Settings(BaseSettings):
     genai_hub_client_secret: SecretStr = SecretStr("")
     genai_hub_model: str = ""
     genai_hub_timeout_seconds: float = Field(default=8.0, gt=0)
+    # Token endpoint for the client-credentials exchange. The SAP trial
+    # onboarding email calls it the "Token URL" and gives it as a bare XSUAA
+    # host, e.g. https://<tenant>.authentication.<region>.hana.ondemand.com.
+    # Blank -> genai_hub falls back to HTTP Basic, which is what the Hub
+    # rejected before; set it to get a real bearer token.
+    genai_hub_auth_url: str = ""
+    # AI resource group the deployment belongs to. Sent as the AI-Resource-Group
+    # header SAP AI Core's inference endpoints expect. Blank -> the header is
+    # omitted rather than sent empty.
+    genai_hub_resource_group: str = ""
+    # Seconds of margin subtracted from a token's advertised lifetime before it
+    # is considered stale, so a token cannot expire mid-request. Blank or unset
+    # -> 30.0. Must be >= 0.
+    genai_hub_token_expiry_margin_seconds: float = Field(default=30.0, ge=0)
     hana_host: str = ""
     hana_port: int = Field(default=443, ge=1, le=65535)
     hana_user: str = ""

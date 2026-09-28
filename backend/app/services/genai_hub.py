@@ -1,10 +1,18 @@
 import json
 import logging
 import re
+import threading
+import time
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
+
+if TYPE_CHECKING:
+    # httpx exports the USE_CLIENT_DEFAULT sentinel at top level but not the
+    # class behind it, so the annotation needs the private path. Only needed for
+    # typing — the value itself is always the public httpx.USE_CLIENT_DEFAULT.
+    from httpx._client import UseClientDefault
 
 from app.config import Settings
 from app.mocks.genai_fixtures import (
@@ -22,6 +30,10 @@ from app.models import (
 logger = logging.getLogger(__name__)
 
 _TOKEN_PATTERN = re.compile(r"[a-z0-9+#.]+")
+# XSUAA's documented client-credentials lifetime. Used only when a token
+# response omits expires_in or holds something unparseable, so the cache still
+# has a number to work with instead of re-minting on every call.
+DEFAULT_TOKEN_LIFETIME_SECONDS = 3600.0
 _STOP_WORDS = frozenset(
     {
         "and",
@@ -182,25 +194,155 @@ def post_orchestration(payload: dict[str, Any], settings: Settings) -> Any:
     "how do we reach the Hub" is the point — if the auth shape or the timeout
     changes, both callers change together instead of drifting apart.
 
+    Authentication is the two-step SAP AI Core flow when
+    ``GENAI_HUB_AUTH_URL`` is set: mint a bearer token with
+    ``grant_type=client_credentials``, then send it as ``Authorization:
+    Bearer``. With that variable blank the call falls back to HTTP Basic, which
+    is what the Hub rejected before this change — Basic is a credential sent on
+    every request, not a token, and the inference endpoint answers it with 401.
+
     Raises RuntimeError when the live configuration is incomplete, and
-    httpx.HTTPError when the call itself fails. Callers are expected to degrade
+    httpx.HTTPError when a call itself fails. Callers are expected to degrade
     to a labelled fixture rather than let either propagate.
     """
     _require_live_configuration(settings)
-    auth = httpx.BasicAuth(
-        settings.genai_hub_client_id,
-        settings.genai_hub_client_secret.get_secret_value(),
-    )
     timeout = settings.genai_hub_timeout_seconds
+    # Exactly one auth shape per request: a bearer token when a token endpoint
+    # is configured, HTTP Basic otherwise. httpx.UseClientDefault is httpx's
+    # "argument not supplied" sentinel, so the Basic path sends no auth at all
+    # rather than an empty one that would override the Authorization header.
+    auth: httpx.Auth | UseClientDefault = (
+        httpx.USE_CLIENT_DEFAULT
+        if settings.genai_hub_auth_url.strip()
+        else _basic_auth(settings)
+    )
     with httpx.Client(timeout=timeout) as client:
         response = client.post(
             settings.genai_hub_endpoint,
             json=payload,
+            headers=_auth_headers(settings),
             auth=auth,
-            headers={"Content-Type": "application/json"},
         )
         response.raise_for_status()
         return response.json()
+
+
+def _basic_auth(settings: Settings) -> httpx.BasicAuth:
+    return httpx.BasicAuth(
+        settings.genai_hub_client_id,
+        settings.genai_hub_client_secret.get_secret_value(),
+    )
+
+
+def _auth_headers(settings: Settings) -> dict[str, str]:
+    """Build the request headers, including a bearer token when one is due."""
+    headers = {"Content-Type": "application/json"}
+    resource_group = settings.genai_hub_resource_group.strip()
+    if resource_group:
+        # AI Core routes a request to the deployment's resource group. Sending
+        # it blank is a 403, so the header is omitted rather than emptied.
+        headers["AI-Resource-Group"] = resource_group
+    token = _access_token(settings)
+    if token is not None:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+# ── Token exchange ──────────────────────────────────────────────────────
+#
+# SAP AI Core does not take the client secret on the inference request. It takes
+# a bearer token from the XSUAA token endpoint, obtained with the client
+# credentials. Without this the only option is Basic auth, which the inference
+# endpoint answers with 401 — so the answer to "why is AI Core not live?" was
+# "the auth shape was wrong", not "we had no trial key".
+#
+# The token lives for `expires_in` seconds (XSUAA issues 3600). It is cached
+# until shortly before it expires rather than re-minted per request, because the
+# pipeline streams seven agent events and re-minting on each one would mean an
+# auth round trip per event. The margin keeps a token from expiring mid-flight.
+
+TOKEN_PATH = "/oauth/token"
+_TOKEN_LOCK = threading.Lock()
+_TOKEN_CACHE: dict[str, tuple[str, float]] = {}
+
+
+def _access_token(settings: Settings) -> str | None:
+    """Return a cached bearer token, minting one when the cache is cold or stale.
+
+    Returns None when no token endpoint is configured, which sends the caller
+    down the Basic-auth path rather than raising: a blank GENAI_HUB_AUTH_URL is
+    a legitimate configuration for a deployment that does accept Basic.
+    """
+    auth_url = settings.genai_hub_auth_url.strip()
+    if not auth_url:
+        return None
+    with _TOKEN_LOCK:
+        cached = _TOKEN_CACHE.get(_token_cache_key(settings))
+        if cached is not None:
+            token, expires_at = cached
+            if time.monotonic() < expires_at:
+                return token
+        token, expires_in = _mint_token(settings, auth_url)
+        margin = settings.genai_hub_token_expiry_margin_seconds
+        # A negative lifetime means the cache would consider the token stale
+        # forever and re-mint on every call; clamp so at least this call reuses it.
+        lifetime = max(0.0, expires_in - margin)
+        _TOKEN_CACHE[_token_cache_key(settings)] = (token, time.monotonic() + lifetime)
+        return token
+
+
+def _mint_token(settings: Settings, auth_url: str) -> tuple[str, float]:
+    """Exchange the client credentials for a bearer token and its lifetime."""
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": settings.genai_hub_client_id,
+        "client_secret": settings.genai_hub_client_secret.get_secret_value(),
+    }
+    with httpx.Client(timeout=settings.genai_hub_timeout_seconds) as client:
+        response = client.post(_token_url(auth_url), data=data)
+        response.raise_for_status()
+        document = response.json()
+    if not isinstance(document, Mapping):
+        raise RuntimeError("the GenAI Hub token endpoint did not return a JSON object")
+    token = document.get("access_token")
+    if not isinstance(token, str) or not token.strip():
+        raise RuntimeError("the GenAI Hub token endpoint returned no access_token")
+    try:
+        expires_in = float(document.get("expires_in", DEFAULT_TOKEN_LIFETIME_SECONDS))
+    except (TypeError, ValueError):
+        # A malformed lifetime is not a reason to fail the demo: assume the
+        # documented XSUAA default and cache against that.
+        logger.warning("the token response held a non-numeric expires_in", exc_info=True)
+        expires_in = DEFAULT_TOKEN_LIFETIME_SECONDS
+    return token.strip(), expires_in
+
+
+def _token_url(auth_url: str) -> str:
+    """Accept either a bare XSUAA host or a full token URL.
+
+    The SAP trial onboarding email gives the "Token URL" as a bare host, but
+    documentation and copy-paste both produce the full /oauth/token form.
+    Appending to a URL that already ends in the path would 404.
+    """
+    trimmed = auth_url.rstrip("/")
+    return trimmed if trimmed.endswith(TOKEN_PATH) else f"{trimmed}{TOKEN_PATH}"
+
+
+def _token_cache_key(settings: Settings) -> str:
+    """Scope the cache to the credentials it was minted for.
+
+    Two Settings objects in one process (the app, and a test) must not share a
+    token, so the key carries the client id and auth URL. The secret is
+    deliberately not in the key: it is never logged, and including it would put
+    a credential in a dict repr that an exception could capture.
+    """
+    return f"{settings.genai_hub_client_id}@{settings.genai_hub_auth_url.strip()}"
+
+
+def reset_token_cache() -> None:
+    """Drop every cached bearer token. Used by tests and on reconfiguration."""
+    with _TOKEN_LOCK:
+        _TOKEN_CACHE.clear()
 
 
 def proof_requests() -> dict[str, str]:
