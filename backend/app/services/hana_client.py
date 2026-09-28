@@ -174,7 +174,13 @@ def _connect_kwargs(settings: Settings) -> dict[str, Any]:
         "password": settings.hana_password.get_secret_value(),
         "autocommit": True,
         "encrypt": HANA_CLOUD_ENCRYPT,
-        "validateCertificate": HANA_CLOUD_VALIDATE_CERTIFICATE,
+        # The HANA Python client spells this `sslValidateCertificate`. The
+        # JDBC-flavoured `validateCertificate` is ACCEPTED AND SILENTLY IGNORED:
+        # the driver still looks for a trust anchor and the connection dies with
+        # "RTE:[300012] Cannot create SSL engine: No valid certificate specified"
+        # even though the caller asked to skip validation. Measured against the
+        # Hackfest 2026 trial instance, release 2026.14.
+        "sslValidateCertificate": HANA_CLOUD_VALIDATE_CERTIFICATE,
         "connectionTimeout": int(settings.hana_query_timeout_seconds),
     }
 

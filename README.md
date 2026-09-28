@@ -250,9 +250,9 @@ justification cannot drift away from the value it justifies.
 - The browser WebSocket path needs demo mode off to be reachable. Rehearse that
   toggle before presenting.
 - Role embeddings come from a deterministic hashing embedder, not a model.
-- `.gitignore` does not ignore `.env`. Add that rule before creating one, and
-  check `git status` before committing. Any `VITE_`-prefixed variable is inlined
-  into the built bundle and is publicly readable — no secret belongs there.
+- Any `VITE_`-prefixed variable is inlined into the built bundle and is publicly
+  readable, so no secret belongs there. (`.env` files *are* git-ignored, in
+  `backend/.gitignore` and `frontend/.gitignore`, with `.env.example` kept.)
 
 ## Licence
 

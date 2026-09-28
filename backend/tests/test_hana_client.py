@@ -202,7 +202,14 @@ def test_get_connection_builds_the_documented_tls_connect_kwargs(
             "password": "super-secret-value",
             "autocommit": True,
             "encrypt": True,
-            "validateCertificate": False,
+            # `sslValidateCertificate`, NOT `validateCertificate`. The latter is
+            # the JDBC spelling and the HANA Python client accepts-and-ignores
+            # it, so the driver keeps looking for a trust anchor and the
+            # connection fails with RTE 300012 even though the caller asked to
+            # skip validation. Measured against the Hackfest 2026 trial
+            # instance. This assertion exists to stop that regression returning
+            # under the JDBC name.
+            "sslValidateCertificate": False,
             "connectionTimeout": 8,
         }
     ]

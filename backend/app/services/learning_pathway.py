@@ -4,6 +4,25 @@ The graph is seeded from ``app.mocks.hana_fixtures`` and created by
 ``scripts/init_hana_schema.sql``. When SAP HANA Cloud cannot answer, the same
 weighted graph is walked locally so the candidate still receives a route, but
 the response is then labelled ``simulated`` instead of ``live``.
+
+**Why the database returns the graph and not the path.** An earlier version sent
+a recursive CTE (``WITH LEG_PATH ... UNION ALL ... FROM LEG_PATH``) and asked
+HANA for the cheapest route in one statement. That query was never executed
+against a live instance before, and it cannot work: SAP HANA Cloud rejects
+recursive common table expressions outright, with
+``[5095] Unsupported Recursive Common Table Expression: Recursive common table
+expressions are not supported``. The non-recursive spelling fails differently
+(``[259] Could not find table/view LEG_PATH``) because the self-reference is
+never bound. Measured against the Hackfest 2026 trial instance, release
+2026.14.
+
+So the split of work is now the same one ``inclusive_matching`` already uses:
+HANA owns the DATA, Python owns the ALGORITHM. One plain SELECT returns the edge
+list, and the Dijkstra that was always here walks it. The route is still
+computed from the live graph — the weights come from HANA on every run — and the
+result is still labelled ``live`` because the data did come from HANA. What
+changed is that no claim is made about HANA executing a traversal it does not
+support.
 """
 
 import logging
@@ -73,6 +92,21 @@ SELECT t.NAME AS SKILL, p.LEG_HOURS - p.PREV_HOURS AS HOURS
  ORDER BY p.DEPTH ASC
 """
 
+# The graph, read from HANA. HANA supplies the topology and the weights; the
+# traversal happens in Python. See the module docstring for why.
+#
+# The tables are addressed WITHOUT a `SKILLS_GRAPH.` prefix. A graph workspace
+# is an object that lives inside a schema, not a schema, so qualifying a table
+# with the workspace name fails with `[362] invalid schema name`. The workspace
+# still exists and is still worth creating — it is what makes this pair of tables
+# a declared graph on the instance — but reads go to the base tables.
+SKILLS_GRAPH_SQL = """
+SELECT n.ID, n.NAME, e.SOURCE, e.TARGET, e.HOURS
+  FROM SKILLS_EDGES e
+  JOIN SKILLS_NODES n ON n.ID = e.SOURCE
+ ORDER BY e.SOURCE, e.TARGET
+"""
+
 
 def route(
     settings: Settings,
@@ -123,47 +157,131 @@ def _local_legs(start_id: int, terminal_id: int) -> list[RouteLeg]:
 
 
 def _live_legs(settings: Settings, from_skill: str, target_skill: str) -> list[RouteLeg] | None:
+    """Build the route legs from HANA's graph, walking it here.
+
+    Returns None when HANA is unavailable, unreachable, or returns something
+    that is not a usable graph — and the caller then falls back to the bundled
+    fixture and labels the response ``simulated``. There is no partial credit:
+    a route is either computed from the live weights or it is not claimed to be.
+    """
     if not hana_client.is_available(settings):
         return None
     try:
-        rows = hana_client.run_query(
-            settings,
-            LEAST_HOURS_PATH_SQL,
-            {"from_skill": from_skill, "target_skill": target_skill},
-        )
+        rows = hana_client.run_query(settings, SKILLS_GRAPH_SQL)
     except Exception:
         logger.warning(
-            "SAP HANA Cloud least-hours path query failed; computing the route locally",
+            "SAP HANA Cloud skills graph query failed; computing the route locally",
             exc_info=True,
         )
         return None
-    legs = _coerce_live_legs(rows, from_skill)
-    if legs is None:
+
+    graph = _coerce_live_graph(rows)
+    if graph is None:
         logger.warning(
-            "SAP HANA Cloud returned an unusable least-hours path; computing the route locally"
+            "SAP HANA Cloud returned an unusable skills graph; computing the route locally"
         )
-    return legs
-
-
-def _coerce_live_legs(rows: list[dict[str, Any]], from_skill: str) -> list[RouteLeg] | None:
-    if len(rows) < 2:
         return None
-    legs: list[RouteLeg] = []
-    seen: set[str] = set()
-    for index, row in enumerate(rows):
-        name = row.get("SKILL")
+
+    start_id = SKILL_IDS.get(from_skill)
+    terminal_id = SKILL_IDS.get(target_skill)
+    if start_id is None or terminal_id is None:
+        return None
+
+    path = _dijkstra_in(graph, start_id, terminal_id)
+    if path is None:
+        logger.warning(
+            "the live skills graph has no path from %r to %r; computing the route locally",
+            from_skill,
+            target_skill,
+        )
+        return None
+
+    return [
+        RouteLeg(
+            skill=SKILL_NAMES.get(node_id, str(node_id)),
+            hours=0 if index == 0 else graph[(path[index - 1], node_id)],
+        )
+        for index, node_id in enumerate(path)
+    ]
+
+
+def _coerce_live_graph(rows: list[dict[str, Any]]) -> dict[tuple[int, int], int] | None:
+    """Turn HANA's edge rows into a weighted adjacency, or None if unusable.
+
+    HANA is the authority on the weights, so a row that cannot be read as
+    ``(source, target, hours)`` makes the whole graph untrustworthy rather than
+    just that one leg. Returning None keeps the response honestly labelled
+    instead of shipping a route built from a partially-read graph.
+    """
+    graph: dict[tuple[int, int], int] = {}
+    for row in rows:
+        source = row.get("SOURCE")
+        target = row.get("TARGET")
         hours = row.get("HOURS")
-        if not isinstance(name, str) or name in seen or name not in SKILL_IDS:
+        if (
+            isinstance(source, bool)
+            or not isinstance(source, int)
+            or isinstance(target, bool)
+            or not isinstance(target, int)
+            or isinstance(hours, bool)
+            or not isinstance(hours, int)
+            or hours < 0
+        ):
             return None
-        if isinstance(hours, bool) or not isinstance(hours, int):
+        current = graph.get((source, target))
+        if current is None or hours < current:
+            graph[(source, target)] = hours
+    return graph or None
+
+
+def _dijkstra_in(
+    graph: Mapping[tuple[int, int], int],
+    start_id: int,
+    terminal_id: int,
+) -> list[int] | None:
+    """Least-hours walk over an arbitrary edge set.
+
+    The same algorithm as :func:`_shortest_path`, but over the graph HANA
+    returned rather than the bundled fixture, so the live and simulated paths
+    are provably the same computation over different weights.
+    """
+    if start_id == terminal_id:
+        return [start_id]
+    adjacency: dict[int, list[tuple[int, int]]] = {}
+    for (source, target), hours in graph.items():
+        adjacency.setdefault(source, []).append((target, hours))
+    for targets in adjacency.values():
+        targets.sort()
+
+    distances: dict[int, int] = {start_id: 0}
+    previous: dict[int, int] = {}
+    settled: set[int] = set()
+    queue: list[tuple[int, int]] = [(0, start_id)]
+    while queue:
+        distance, node_id = heappop(queue)
+        if node_id in settled:
+            continue
+        settled.add(node_id)
+        if node_id == terminal_id:
+            break
+        for target, hours in adjacency.get(node_id, ()):
+            if target in settled:
+                continue
+            candidate = distance + hours
+            best = distances.get(target)
+            if best is None or candidate < best:
+                distances[target] = candidate
+                previous[target] = node_id
+                heappush(queue, (candidate, target))
+    if terminal_id not in distances:
+        return None
+    path = [terminal_id]
+    while path[-1] != start_id:
+        parent = previous.get(path[-1])
+        if parent is None:
             return None
-        if hours < 0 or (index == 0 and hours != 0) or (index > 0 and hours == 0):
-            return None
-        if index == 0 and name != from_skill:
-            return None
-        seen.add(name)
-        legs.append(RouteLeg(skill=name, hours=hours))
-    return legs
+        path.append(parent)
+    return list(reversed(path))
 
 
 def _paid_bridge(target_role: str, terminal_id: int) -> dict[str, JsonValue]:

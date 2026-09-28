@@ -743,8 +743,16 @@ def test_hana_ping_reports_a_dead_connection_instead_of_raising() -> None:
     )
 
 
-def test_sap_hana_client_is_unavailable_without_the_hdbcli_driver() -> None:
+def test_sap_hana_client_is_unavailable_without_the_hdbcli_driver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = unreachable_sap_settings(UNUSED_DATABASE_PATH)
+
+    # Simulate an absent driver rather than depending on one. This test used to
+    # rely on `hdbcli` not being installed in the venv, which stopped being true
+    # the moment anyone installed it to talk to a real instance — the test then
+    # failed for a reason that had nothing to do with the code under test.
+    monkeypatch.setattr(hana_client, "_load_optional_module", lambda _name: None)
 
     assert settings.use_mock_hana is False
     assert hana_client.is_available(settings) is False

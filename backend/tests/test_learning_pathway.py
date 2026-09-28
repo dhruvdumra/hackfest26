@@ -192,8 +192,25 @@ def test_failed_live_query_falls_back_to_simulated(monkeypatch: pytest.MonkeyPat
     assert response.weeks == 7.0
 
 
-def test_answered_live_query_is_labelled_live(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_live_graph_produces_a_live_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HANA supplies the edge list; the least-hours walk happens here.
+
+    The live branch no longer asks HANA for the finished path, because SAP HANA
+    Cloud does not support recursive common table expressions and the query that
+    used to ask for it could never have run. What comes back is the graph, and
+    the route is computed from those weights — so `live` means the WEIGHTS came
+    from HANA, which is the claim that is actually true.
+    """
     queries: list[tuple[str, Mapping[str, Any] | None]] = []
+    live_edges = [
+        {"ID": 1, "NAME": "Manual testing", "SOURCE": 1, "TARGET": 2, "HOURS": 30},
+        {"ID": 2, "NAME": "Manual testing", "SOURCE": 1, "TARGET": 8, "HOURS": 30},
+        {"ID": 3, "NAME": "Manual testing", "SOURCE": 1, "TARGET": 10, "HOURS": 15},
+        {"ID": 4, "NAME": "Regression testing", "SOURCE": 2, "TARGET": 8, "HOURS": 30},
+        {"ID": 5, "NAME": "Regression testing", "SOURCE": 2, "TARGET": 10, "HOURS": 10},
+        {"ID": 6, "NAME": "QA analytics", "SOURCE": 8, "TARGET": 7, "HOURS": 18},
+        {"ID": 7, "NAME": "Defect triage", "SOURCE": 10, "TARGET": 7, "HOURS": 6},
+    ]
 
     def capture_query(
         _settings: Settings,
@@ -201,12 +218,7 @@ def test_answered_live_query_is_labelled_live(monkeypatch: pytest.MonkeyPatch) -
         parameters: Mapping[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         queries.append((sql, parameters))
-        return [
-            {"SKILL": "Manual testing", "HOURS": 0},
-            {"SKILL": "Regression testing", "HOURS": 30},
-            {"SKILL": "Stakeholder communication", "HOURS": 30},
-            {"SKILL": "QA analytics", "HOURS": 18},
-        ]
+        return live_edges
 
     monkeypatch.setattr(hana_client, "is_available", fake_available)
     monkeypatch.setattr(hana_client, "run_query", capture_query)
@@ -214,45 +226,47 @@ def test_answered_live_query_is_labelled_live(monkeypatch: pytest.MonkeyPatch) -
     response = route(LIVE_SETTINGS, KAVYA_START, "qa-analyst", 10)
 
     assert response.source == "live"
-    assert response.total_hours == 78
-    assert response.weeks == 7.8
+    # Manual testing -> Defect triage (15) -> QA analytics (6) = 21 hours,
+    # which is cheaper than the 30-hour route through Regression testing. The
+    # walk is real: it chose the cheaper path out of the live weights.
+    assert [leg.skill for leg in response.legs] == [
+        KAVYA_START,
+        "Defect triage",
+        "QA analytics",
+    ]
+    assert response.total_hours == 21
+    assert response.weeks == 2.1
     assert response.paid_bridge is not None
     assert response.paid_bridge["source"] == "simulated"
     assert len(queries) == 1
-    assert queries[0][0] == learning_pathway.LEAST_HOURS_PATH_SQL
-    assert "SKILLS_GRAPH" in queries[0][0]
-    assert queries[0][1] == {
-        "from_skill": "Manual testing",
-        "target_skill": "QA analytics",
-    }
+    assert queries[0][0] == learning_pathway.SKILLS_GRAPH_SQL
+    # The tables are read unqualified: a graph workspace is an object inside a
+    # schema, not a schema, so `SKILLS_GRAPH.SKILLS_EDGES` is a [362] error.
+    assert "SKILLS_GRAPH." not in queries[0][0]
+    assert queries[0][1] is None
 
 
 @pytest.mark.parametrize(
     "rows",
     [
+        # No edges at all.
         [],
-        [{"SKILL": "Manual testing", "HOURS": 0}],
-        [{"SKILL": "Regression testing", "HOURS": 30}, {"SKILL": "QA analytics", "HOURS": 18}],
+        # A row missing its weight.
+        [{"SOURCE": 1, "TARGET": 2}],
+        # A weight that is not a number.
+        [{"SOURCE": 1, "TARGET": 2, "HOURS": "thirty"}],
+        # A negative weight.
+        [{"SOURCE": 1, "TARGET": 2, "HOURS": -5}],
+        # A non-integer node id.
+        [{"SOURCE": "1", "TARGET": 2, "HOURS": 30}],
+        # Well-formed edges that do not reach the target skill.
         [
-            {"SKILL": "Manual testing", "HOURS": 0},
-            {"SKILL": "Quantum testing", "HOURS": 30},
-        ],
-        [
-            {"SKILL": "Manual testing", "HOURS": 0},
-            {"SKILL": "Regression testing", "HOURS": "thirty"},
-        ],
-        [
-            {"SKILL": "Manual testing", "HOURS": 0},
-            {"SKILL": "Regression testing", "HOURS": 0},
-        ],
-        [
-            {"SKILL": "Manual testing", "HOURS": 0},
-            {"SKILL": "Regression testing", "HOURS": 30},
-            {"SKILL": "Regression testing", "HOURS": 5},
+            {"SOURCE": 1, "TARGET": 2, "HOURS": 30},
+            {"SOURCE": 2, "TARGET": 3, "HOURS": 20},
         ],
     ],
 )
-def test_unusable_live_rows_never_claim_a_live_source(
+def test_an_unusable_live_graph_never_claims_a_live_source(
     rows: list[dict[str, Any]],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -262,6 +276,7 @@ def test_unusable_live_rows_never_claim_a_live_source(
     response = route(LIVE_SETTINGS, KAVYA_START, "qa-analyst", 10)
 
     assert response.source == "simulated"
+    # The bundled fixture's answer, not anything derived from the bad rows.
     assert response.total_hours == 70
 
 
