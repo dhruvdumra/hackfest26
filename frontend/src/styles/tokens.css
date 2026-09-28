@@ -1,9 +1,15 @@
 /* ReRoute design tokens — R2 palette.
  *
- * Origin: ReRoute_Style_Reference.md (Hyperstudio "Ditto"), with the colour
- * values re-derived from a WCAG audit of that palette on this project's own
- * canvas. Every R1 token NAME is preserved, so this is a value swap rather than
- * a rewrite — no component changed its class list to adopt it.
+ * Origin: R1 was a literal 1:1 port of a third-party design system
+ * (Hyperstudio "Ditto"), carried in a `ReRoute_Style_Reference.md` that has
+ * since been removed from this repository — it was someone else's system, and
+ * publishing it as ours was never right. Every R1 token NAME is preserved, so
+ * adopting R2 was a value swap rather than a rewrite: no component changed its
+ * class list to take it.
+ *
+ * The colour values are re-derived from a WCAG audit of that palette on this
+ * project's own canvas, and each token below carries the measurement behind it.
+ * The reasoning now lives with the values, so it cannot drift away from them.
  *
  * Why the values depart from the reference, which says "do not alter these
  * values": R1 was a literal 1:1 port of a palette built for a different

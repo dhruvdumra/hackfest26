@@ -1,23 +1,31 @@
 // Shared class map for ReRoute.
 //
-// Every string here resolves to a token in `styles/tokens.css`, which is
-// transcribed from ReRoute_Style_Reference.md. The rules that hold everywhere:
+// Every string here resolves to a token in `styles/tokens.css`, which is where
+// the design system's values live and why each one is what it is. The rules
+// that hold everywhere:
 //
 //   * weight 400 for everything except the nav wordmark and inline data labels
 //     (500); 700 nowhere — scale and tracking carry hierarchy, never boldness
 //   * Inter for all copy, JetBrains Mono for meta/labels/captions; two faces
 //   * sections are separated by a 1px Graphite hairline, never by a tint change
 //   * the glossy pill is the only filled surface; everything else is outlined
-//   * Compass Gold is for icon strokes only — never text, never a background
-//   * Pulse Green is the live-status dot and nothing else
+//   * the emerald accent is for icon strokes and interactive state only — never
+//     body copy, never a large fill
+//   * amber belongs to exactly one thing: a FLAGGED bias verdict
 //
-// Two rules that are about *rhythm* rather than about ink, and that the
-// earlier version of this file did not hold to:
+// This file used to describe a Compass Gold icon colour and a Pulse Green
+// status dot, transcribed from a ReRoute_Style_Reference.md that has since been
+// removed from the repository. Both colours are gone: that document was a
+// third-party port, and the palette was re-derived on a WCAG audit of this
+// project's own canvas. The values and their justifications now live with the
+// values, in tokens.css.
+//
+// Two rules that are about *rhythm* rather than about ink:
 //
 //   * one size carries exactly one line-height, so two runs of the same size
 //     are always the same height
-//   * vertical space is quoted from the spacing scale below, never from an
-//     arbitrary pixel value chosen at the call site
+//   * vertical space is quoted from a small set of literal steps, so a spacing
+//     change lands in one place rather than at every call site
 //
 // Views compose these rather than re-deriving type or colour, so a token change
 // lands in one place.

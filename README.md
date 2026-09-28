@@ -226,15 +226,21 @@ backend/
   app/orchestrator.py      the 7-node graph
   app/domain/ghost_twin.py the audit — no LLM, pure Python
   app/services/            genai_hub.py · hana_client.py · inclusive_matching.py
+                           employer_rewrite.py (the LLM-backed filter rewrite)
   app/api/                 12 endpoints
-  tests/                   187 tests
+  tests/                   199 tests
 frontend/
   src/components/          AgentConsole · GhostTwinPanel · PipelineAgentGrid
   src/pages/               WorkerApp · RouteMap · HRConsole
-  src/styles/tokens.css    the design tokens, and why each value is what it is
-ReRoute_PRD.md              product requirements
-ReRoute_Style_Reference.md the ported design system
+  src/styles/tokens.css    the design system: every value and why it is that one
+  src/styles/classes.js    the shared class map
+ReRoute_PRD.md             product requirements
 ```
+
+The design system lives in `frontend/src/styles/tokens.css` rather than in a
+separate specification document. Each token carries the measurement behind it —
+a contrast ratio, a luminance ladder, the reason a value was changed — so the
+justification cannot drift away from the value it justifies.
 
 ## Known gaps
 
