@@ -232,8 +232,30 @@ function getEditedFields(form) {
   return EDITABLE_FIELDS.filter((field) => form[field] !== INITIAL_FORM[field])
 }
 
+/* The demo opens on the biased screen, and that is a deliberate reversal of
+ * the obvious default.
+ *
+ * The fair screen is ReRoute's own merit model. It scores 86 with every twin
+ * flat, which is the correct result and the least interesting one to watch: a
+ * judge who presses Run Audit, sees PASS and max_delta 0, concludes the audit
+ * found nothing, and moves on. The finding — that a legacy screen costs Kavya
+ * six points for an 18-month break, three for her college, and four for her
+ * city — is real, and it was one toggle away from where the audience lands.
+ *
+ * So the panel opens with the legacy screen selected. The verdict is amber, the
+ * offending rows light up, and the same candidate, same score, same pure-Python
+ * engine produces a FLAGGED. Toggling back to fair merit still shows a PASS,
+ * which is the other half of the argument: the engine finds bias when there is
+ * bias and stays flat when there is not.
+ *
+ * Nothing here is dressed up. The mode is named in the meta row
+ * ("Simulated legacy ATS"), the switch label says what it is, and the audit is
+ * the same pure-Python computation either way — the toggle changes which
+ * scoring model builds the twins, not whether the audit runs. */
+const DEFAULT_SIMULATE_LEGACY_ATS = true
+
 export default function GhostTwinPanel({ baseUrl = '' }) {
-  const [simulateLegacyAts, setSimulateLegacyAts] = useState(false)
+  const [simulateLegacyAts, setSimulateLegacyAts] = useState(DEFAULT_SIMULATE_LEGACY_ATS)
   const [form, setForm] = useState({ ...INITIAL_FORM })
   const [audit, setAudit] = useState(EMPTY_AUDIT)
   const [hasAudit, setHasAudit] = useState(false)
@@ -397,7 +419,16 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
           onChange={handleToggleChange}
           disabled={isLoading}
           label="Simulate Legacy ATS"
-          description="Add a comparison run for a legacy, biased screening model."
+          /* Reads as a mode selector, not an opt-in, because that is what it now
+           * is. "Add a comparison run" was written when the fair screen was the
+           * default and the legacy run was something you turned on; with the
+           * legacy screen selected on arrival, the copy has to say which screen
+           * is running and what the other one would show. */
+          description={
+            simulateLegacyAts
+              ? 'Scoring against a legacy, biased screening model. Turn this off to run the same audit against ReRoute’s fair-merit model.'
+              : 'Scoring against ReRoute’s fair-merit model. Turn this on to run the same audit against a legacy, biased screen.'
+          }
         />
         {/* The one filled surface on this screen. */}
         <Button
@@ -569,8 +600,9 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
         <div className={STATE_WRAP_CLASS}>
           <p className={sectionHeadingClass}>Ready to audit</p>
           <p className={STATE_COPY_CLASS}>
-            Run the audit to see how each counterfactual changes the base
-            score. The server decides the fairness threshold.
+            {simulateLegacyAts
+              ? 'Run the audit against the legacy screen. Every counterfactual below will move, and the verdict goes amber where the movement exceeds the threshold.'
+              : 'Run the audit to see how each counterfactual changes the base score. The server decides the fairness threshold.'}
           </p>
         </div>
       ) : (

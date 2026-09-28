@@ -164,6 +164,25 @@ function readStatusBadge(word) {
   return { badge, dot }
 }
 
+/* The panel opens on the legacy screen, so a test that wants the fair screen
+ * has to say so. Without this helper each such test would either click the
+ * toggle and read as if it were testing the default, or silently inherit
+ * whichever mode the panel happens to start in — which is how the demo-order
+ * change would have been able to pass unnoticed. */
+function chooseScoringMode(mode) {
+  const toggle = screen.getByRole('checkbox', { name: 'Simulate Legacy ATS' })
+  const wantLegacy = mode === 'legacy'
+
+  // getByRole narrows by role, not by element type, so the cast is what makes
+  // `.checked` typecheck. toBeChecked() below reads the same property through
+  // jest-dom, which is why the existing assertions never needed it.
+  if (/** @type {HTMLInputElement} */ (toggle).checked !== wantLegacy) {
+    fireEvent.click(toggle)
+  }
+
+  return toggle
+}
+
 describe('GhostTwinPanel', () => {
   let fetchMock
 
@@ -177,16 +196,46 @@ describe('GhostTwinPanel', () => {
     vi.unstubAllGlobals()
   })
 
-  it('starts with fair synthetic mode and the legacy ATS toggle unchecked', () => {
+  it('opens on the legacy screen so the demo lands on the finding', () => {
     render(<GhostTwinPanel />)
 
+    // Deliberate, not an oversight. The fair screen is PASS with max_delta 0,
+    // which a judge reads as "the audit found nothing" — and the actual
+    // finding is one toggle away. Opening on the legacy screen puts the
+    // amber verdict and the moving rows in front of them on the first click.
     expect(
       screen.getByRole('checkbox', { name: 'Simulate Legacy ATS' }),
-    ).not.toBeChecked()
-    expect(screen.getByText('Synthetic fair merit')).toBeInTheDocument()
+    ).toBeChecked()
+    expect(screen.getByText('Simulated legacy ATS')).toBeInTheDocument()
+    expect(screen.queryByText('Synthetic fair merit')).not.toBeInTheDocument()
   })
 
-  it('posts Kavya fair-mode data to the configured backend, overriding no threshold', async () => {
+  /* The demo in one test: a judge who opens the panel, presses Run Audit and
+   * reads nothing else must still see a FLAGGED verdict, a non-zero max delta,
+   * and the offending rows. This is the path the hackathon actually runs, and
+   * it is the one a default-state regression would silently break. */
+  it('lands a judge on FLAGGED from the very first press', async () => {
+    fetchMock.mockResolvedValue(successfulResponse(LEGACY_RESULT))
+    render(<GhostTwinPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
+
+    await screen.findByText('FLAGGED')
+    expect(screen.getByText('Fairness guardrail needs attention')).toBeInTheDocument()
+    expect(screen.getByText('Simulated legacy ATS')).toBeInTheDocument()
+
+    // The finding, stated as numbers rather than as a verdict word.
+    const tiles = within(screen.getByRole('table'))
+    expect(tiles.getAllByRole('row').length).toBeGreaterThan(1)
+    const deltas = screen
+      .getAllByRole('cell')
+      .map((cell) => cell.textContent)
+      .filter((text) => /^[+-]?\d+$/.test(text ?? ''))
+    expect(deltas.length).toBeGreaterThan(0)
+    expect(deltas).toContain('-12')
+  })
+
+  it('posts Kavya legacy-mode data to the configured backend, overriding no threshold', async () => {
     fetchMock.mockResolvedValue(successfulResponse(FAIR_RESULT))
     render(<GhostTwinPanel baseUrl="https://reroute.example" />)
 
@@ -211,7 +260,7 @@ describe('GhostTwinPanel', () => {
     expect(payload).toEqual({
       role_id: 'quality-analyst',
       candidate_profile: KAVYA_PROFILE,
-      simulate_legacy_ats: false,
+      simulate_legacy_ats: true,
     })
     expect(payload).not.toHaveProperty('threshold')
   })
@@ -265,6 +314,7 @@ describe('GhostTwinPanel', () => {
   it('renders a zero-delta table and a PASS result for fair mode', async () => {
     fetchMock.mockResolvedValue(successfulResponse(FAIR_RESULT))
     const { container } = render(<GhostTwinPanel />)
+    chooseScoringMode('fair')
 
     fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
 
@@ -318,10 +368,7 @@ describe('GhostTwinPanel', () => {
     fetchMock.mockResolvedValue(successfulResponse(LEGACY_RESULT))
     render(<GhostTwinPanel />)
 
-    const toggle = screen.getByRole('checkbox', {
-      name: 'Simulate Legacy ATS',
-    })
-    fireEvent.click(toggle)
+    const toggle = chooseScoringMode('legacy')
 
     expect(toggle).toBeChecked()
     expect(screen.getByText('Simulated legacy ATS')).toBeInTheDocument()
@@ -581,6 +628,7 @@ describe('GhostTwinPanel', () => {
   it('sends the edited profile instead of the seeded one', async () => {
     fetchMock.mockResolvedValue(successfulResponse(FAIR_RESULT))
     render(<GhostTwinPanel />)
+    chooseScoringMode('fair')
 
     fireEvent.change(screen.getByLabelText('Gender'), {
       target: { value: 'male' },
@@ -622,6 +670,7 @@ describe('GhostTwinPanel', () => {
       .mockResolvedValueOnce(successfulResponse(LEGACY_RESULT))
 
     render(<GhostTwinPanel />)
+    chooseScoringMode('fair')
 
     fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
     await screen.findByText('PASS')
@@ -657,8 +706,8 @@ describe('GhostTwinPanel', () => {
       .mockResolvedValueOnce(successfulResponse(LEGACY_RESULT_AFTER_EDIT))
 
     render(<GhostTwinPanel />)
+    chooseScoringMode('legacy')
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Simulate Legacy ATS' }))
     fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
 
     await screen.findByText('FLAGGED')
@@ -697,6 +746,7 @@ describe('GhostTwinPanel', () => {
       .mockResolvedValueOnce(successfulResponse(FAIR_RESULT_AFTER_EDIT))
 
     render(<GhostTwinPanel />)
+    chooseScoringMode('fair')
 
     fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
     await screen.findByText('PASS')
@@ -765,6 +815,7 @@ describe('GhostTwinPanel', () => {
   it('resets the audit result but keeps the edited profile on toggle change', async () => {
     fetchMock.mockResolvedValue(successfulResponse(FAIR_RESULT))
     render(<GhostTwinPanel />)
+    chooseScoringMode('fair')
 
     fireEvent.change(screen.getByLabelText('Gender'), {
       target: { value: 'male' },
