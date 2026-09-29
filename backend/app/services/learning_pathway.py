@@ -29,6 +29,7 @@ import logging
 from collections.abc import Mapping
 from heapq import heappop, heappush
 from importlib import import_module
+from itertools import pairwise
 from types import ModuleType
 from typing import Any, Literal
 
@@ -295,6 +296,27 @@ def _paid_bridge(target_role: str, terminal_id: int) -> dict[str, JsonValue]:
             "fixture, not a live SAP job posting."
         ),
     }
+
+
+def bridge_hours(from_skill: str, target_role: str) -> int | None:
+    """Least learning hours from ``from_skill`` to the role's target skill.
+
+    Computed on the bundled skills graph, the same data seeded into HANA, so the
+    orchestrator can compare starting points without a database call per
+    candidate. None when the skill or role is unknown, the skill already is the
+    target, or no path exists.
+    """
+    start_id = SKILL_IDS.get(from_skill)
+    terminal_name = ROLE_TARGET_SKILL.get(target_role)
+    if start_id is None or terminal_name is None:
+        return None
+    terminal_id = SKILL_IDS[terminal_name]
+    if start_id == terminal_id:
+        return None
+    path = _dijkstra_path(start_id, terminal_id)
+    if path is None:
+        return None
+    return sum(EDGE_HOURS[pair] for pair in pairwise(path))
 
 
 def _skill_id(name: str) -> int:

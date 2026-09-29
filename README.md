@@ -193,14 +193,14 @@ curl http://127.0.0.1:8000/health
 ## Verification
 
 ```bash
-cd backend  && .venv/Scripts/python -m pytest    # 326 passed
+cd backend  && .venv/Scripts/python -m pytest    # 332 passed
              .venv/Scripts/python -m ruff check .
              .venv/Scripts/python -m mypy
 cd frontend && npm test                          # 139 passed
              npm run lint && npm run typecheck && npm run build
 ```
 
-**465 tests, all passing.** The suites cover the parts that matter to a judge:
+**471 tests, all passing.** The suites cover the parts that matter to a judge:
 the audit's threshold boundary and the exact legacy-screen numbers the deck
 quotes, the guardrail's blocking rule, the consent wait (yes, no, timeout, a
 second answer), orchestrator failures that must not abort a run, WebSocket

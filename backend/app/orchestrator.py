@@ -427,7 +427,7 @@ async def _learning_pathway(state: OrchestrationState) -> OrchestrationState:
         response = await asyncio.to_thread(
             learning_pathway.route,
             settings,
-            _route_start_skill(passport),
+            _route_start_skill(passport, target_role),
             target_role,
             hours_per_week,
         )
@@ -973,14 +973,28 @@ def _build_passport(
     return merge_skill_passport(session, response)
 
 
-def _route_start_skill(passport: SkillPassport | None) -> str:
+def _route_start_skill(passport: SkillPassport | None, target_role: str) -> str:
+    """Career GPS: start from the proven skill with the shortest bridge to the target.
+
+    Skills still awaiting proof are only considered when nothing is proven.
+    Ties go to the more confident claim, then to the passport's own order, so
+    the route no longer depends on the order an LLM happened to list skills in.
+    """
     canonical = {name.casefold(): name for _, name in SKILL_NODES}
-    if passport is not None:
-        for claim in passport.skills:
-            found = canonical.get(claim.name.casefold())
-            if found is not None:
-                return found
-    return FALLBACK_START_SKILL
+    if passport is None:
+        return FALLBACK_START_SKILL
+    claims = [claim for claim in passport.skills if claim.name.casefold() in canonical]
+    candidates = [claim for claim in claims if claim.verified] or claims
+    best: tuple[tuple[int, float, int], str] | None = None
+    for order, claim in enumerate(candidates):
+        name = canonical[claim.name.casefold()]
+        hours = learning_pathway.bridge_hours(name, target_role)
+        if hours is None:
+            continue
+        key = (hours, -claim.confidence, order)
+        if best is None or key < best[0]:
+            best = (key, name)
+    return best[1] if best is not None else FALLBACK_START_SKILL
 
 
 def _match_results(response: MatchResponse) -> list[MatchResult]:
