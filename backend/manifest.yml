@@ -26,7 +26,10 @@ applications:
     env:
       USE_MOCK_HANA: "false"
       USE_MOCK_GENAI: "false"
-      GENAI_PROVIDER: gemini
+      # auto: Gemini once GEMINI_API_KEY is set, else an LLM_* gateway, else the
+      # labelled fixture. gemini-2.5-* only serves older keys; new ones need 3.5+.
+      GENAI_PROVIDER: auto
+      GEMINI_MODEL: gemini-3.5-flash-lite
       # Falls back to the labelled fixture until the DATASPHERE_* values are set.
       USE_MOCK_MARKET: "false"
       GHOST_TWIN_THRESHOLD: "5"
