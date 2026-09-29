@@ -159,6 +159,19 @@ class SessionStartResponse(APIModel):
     status: Literal["started"] = "started"
 
 
+class EmployerDecisionRequest(APIModel):
+    approved: StrictBool
+
+
+class EmployerDecision(APIModel):
+    job_post_id: str
+    decision: Literal["approved", "rejected"]
+    message: str
+    decided_at: str
+    # Recorded by this backend, not by an ATS or an SAP service.
+    source: Literal["local"] = "local"
+
+
 class ConsentRequest(APIModel):
     accepted: StrictBool
 

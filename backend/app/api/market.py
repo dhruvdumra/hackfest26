@@ -2,11 +2,14 @@ from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.dependencies import SettingsDependency
+from app.api.dependencies import EmployerDecisionsDependency, SettingsDependency
 from app.mocks import market_fixtures
+from app.mocks.employer_fixtures import JOB_POSTS_BY_ID
 from app.models import (
     ROLE_QUERY_MAX_LENGTH,
     DisplacementRadarResponse,
+    EmployerDecision,
+    EmployerDecisionRequest,
     EmployerFilterRewriteRequest,
     EmployerFilterRewriteResponse,
 )
@@ -66,6 +69,49 @@ def rewrite_filter(
             detail=str(error),
         ) from error
     return EmployerFilterRewriteResponse(**rewrite)
+
+
+@router.post(
+    "/employer/rewrite-filter/{job_post_id}/decision",
+    response_model=EmployerDecision,
+    responses={404: {"description": "Unknown job post"}},
+)
+def decide_rewrite(
+    job_post_id: str,
+    request: EmployerDecisionRequest,
+    decisions: EmployerDecisionsDependency,
+) -> EmployerDecision:
+    """The hiring manager approves (publishes) or rejects the rewritten post."""
+    _require_known_post(job_post_id)
+    return decisions.record(job_post_id, request.approved)
+
+
+@router.get(
+    "/employer/rewrite-filter/{job_post_id}/decision",
+    response_model=EmployerDecision,
+    responses={404: {"description": "Unknown job post, or no decision yet"}},
+)
+def read_rewrite_decision(
+    job_post_id: str,
+    decisions: EmployerDecisionsDependency,
+) -> EmployerDecision:
+    _require_known_post(job_post_id)
+    decision = decisions.latest(job_post_id)
+    if decision is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No hiring-manager decision recorded for {job_post_id} yet.",
+        )
+    return decision
+
+
+def _require_known_post(job_post_id: str) -> None:
+    if job_post_id not in JOB_POSTS_BY_ID:
+        known = ", ".join(sorted(JOB_POSTS_BY_ID))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"unknown job_post_id {job_post_id!r}; expected one of: {known}",
+        )
 
 
 def _radar_entry(role: str, city: str) -> dict[str, Any]:
