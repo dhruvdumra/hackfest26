@@ -328,9 +328,12 @@ def _networkx_path(start_id: int, terminal_id: int) -> list[int] | None:
         graph = networkx.DiGraph()
         graph.add_nodes_from(sorted(SKILL_NAMES))
         graph.add_weighted_edges_from(
-            (source, target, hours) for (source, target), hours in EDGE_HOURS.items()
+            ((source, target, hours) for (source, target), hours in EDGE_HOURS.items()),
+            weight="hours",
         )
-        return _coerce_node_path(graph.shortest_path(start_id, terminal_id, weight="hours"))
+        return _coerce_node_path(
+            networkx.shortest_path(graph, start_id, terminal_id, weight="hours")
+        )
     except Exception:
         logger.warning(
             "networkx could not solve the least-hours path; using the built-in Dijkstra",

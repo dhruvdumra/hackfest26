@@ -29,31 +29,42 @@ class FakeGraph:
         self.path = path
         self.nodes: list[object] = []
         self.edges: list[tuple[object, object, object]] = []
+        self.edge_weight_key: str | None = None
 
     def add_nodes_from(self, nodes: Iterable[object]) -> None:
         self.nodes.extend(nodes)
 
-    def add_weighted_edges_from(self, edges: Iterable[tuple[object, object, object]]) -> None:
-        self.edges.extend(edges)
-
-    def shortest_path(
+    def add_weighted_edges_from(
         self,
-        source: object,
-        target: object,
-        weight: str | None = None,
-    ) -> list[object]:
-        return list(self.path)
+        edges: Iterable[tuple[object, object, object]],
+        weight: str = "weight",
+    ) -> None:
+        self.edge_weight_key = weight
+        self.edges.extend(edges)
 
 
 class FakeNetworkX:
+    """Mirrors the real networkx API: ``shortest_path`` is a module function."""
+
     def __init__(self, path: list[object]) -> None:
         self.path = path
         self.graphs: list[FakeGraph] = []
+        self.weights_asked: list[str | None] = []
 
     def DiGraph(self) -> FakeGraph:
         graph = FakeGraph(self.path)
         self.graphs.append(graph)
         return graph
+
+    def shortest_path(
+        self,
+        graph: FakeGraph,
+        source: object,
+        target: object,
+        weight: str | None = None,
+    ) -> list[object]:
+        self.weights_asked.append(weight)
+        return list(graph.path)
 
 
 def build_client() -> TestClient:
@@ -345,6 +356,9 @@ def test_networkx_is_used_when_it_is_importable(monkeypatch: pytest.MonkeyPatch)
     assert fake.graphs[0].edges == [
         (source, target, hours) for (source, target), hours in learning_pathway.EDGE_HOURS.items()
     ]
+    # The edge attribute and the attribute the solver weighs by must be the same key.
+    assert fake.graphs[0].edge_weight_key == "hours"
+    assert fake.weights_asked == ["hours"]
 
 
 def test_unusable_networkx_path_falls_back_to_the_builtin_dijkstra(
@@ -360,6 +374,25 @@ def test_unusable_networkx_path_falls_back_to_the_builtin_dijkstra(
     assert learning_pathway._shortest_path(3, 4) == [3, 4]
     assert learning_pathway._shortest_path(6, 1) is not None
     assert learning_pathway._shortest_path(7, 7) == [7]
+
+
+def test_real_networkx_agrees_with_the_builtin_dijkstra_on_every_pair(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    pytest.importorskip("networkx")
+    skill_ids = sorted(learning_pathway.SKILL_NAMES)
+
+    with caplog.at_level("WARNING", logger=learning_pathway.logger.name):
+        for start_id in skill_ids:
+            for terminal_id in skill_ids:
+                expected = learning_pathway._dijkstra_path(start_id, terminal_id)
+                # A one-node path is rejected on purpose and served by the fallback.
+                if expected is None or start_id == terminal_id:
+                    continue
+                actual = learning_pathway._networkx_path(start_id, terminal_id)
+                assert actual == expected, (start_id, terminal_id)
+
+    assert caplog.records == []
 
 
 def test_fixtures_are_a_valid_directed_graph() -> None:
