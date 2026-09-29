@@ -7,7 +7,7 @@ shortlist filters are opaque, and the one number that governs the transition —
 a score — is a black box. ReRoute recovers the evidence, plans a credible route,
 and then **proves the ranking is fair by attacking it**.
 
-> **Team Ncrypt** · SAP Hackfest 2026 · `github.com/mevarx/hackfest26`
+> **Team ReRoute** · SRM University-AP · SAP Hackfest 2026 · `github.com/mevarx/hackfest26`
 
 ---
 
@@ -21,16 +21,18 @@ college tier, city — it builds a counterfactual twin that differs *only* in th
 one attribute, re-scores the twin through the same engine, and reports the delta.
 If changing who you are changes your score, the screen is biased.
 
-This is a real differential, not a claim. One candidate, two screening models:
+This is a real differential, not a claim. One candidate (Kavya: 29, tier-3
+college, Chennai, 18-month caregiving gap, skill score 86), two screening models:
 
 | Screening model | Score | Verdict | Career-gap delta |
 |---|---|---|---|
 | Fair merit | 86 | `PASS` | ±0 |
-| Legacy biased | 94 | **`FLAGGED`** | **+6** |
+| Legacy biased | 91 | **`FLAGGED`** | **+6** |
 
-The biased model scores her **higher** — and that gap is the problem. Eighteen
-months out of work is worth six points to a legacy ATS, and the audit names it.
-Flip one field in the UI and re-run; the verdict moves.
+Her twin with no career gap scores six points more on the legacy screen, and
+that gap is the problem. Eighteen months out of work is worth six points to a
+legacy ATS, and the audit names it. Flip one field in the UI and re-run; the
+verdict moves.
 
 ---
 
@@ -45,8 +47,10 @@ demand** and shows its working.
   server-governed — the API rejects a client-supplied value, so a caller cannot
   move the goalposts to make a result look clean.
 - **It does not stop at the verdict.** It attributes the bias. Our run reports
-  `career_gap +6, college_tier −3, city +4` — so the fix is specific: rewrite the
-  age, college-tier and gender wording, and replace pedigree with evidence.
+  `career_gap +6, city +4, age +3, college_tier +3, gender 0`, so the fix is
+  specific: rewrite the age, college-tier and gender wording, and replace
+  pedigree with evidence. (The age twin moves her 16 years, 29 → 45: far enough
+  to cross the legacy screen's age bands, so an age bias can actually show.)
 - **The employer gets a rewrite, not a lecture.** `POST /employer/rewrite-filter`
   returns the before/after job post with the restrictive phrases removed and a
   count of candidates the original filter would have hidden.
@@ -69,18 +73,19 @@ Stated plainly, because a judge should not have to guess.
 | Orchestration, 7 agents | **Real.** LangGraph, with a sequential fallback |
 | Event streaming | **Real.** WebSocket, replay on reconnect, `Last-Event-ID` resume |
 | Session store | **Real.** SQLite, atomic versioned updates |
-| Skills extraction | SAP AI Core **client written, never executed** — no credential has ever been supplied |
-| Learning pathway | SAP HANA **client written, never executed** — same |
-| Market radar, employer filter | Static fixtures, labelled `simulated` |
+| Two-Key consent | **Real.** The run waits for Kavya's yes/no (`POST /session/{id}/consent`); no answer in 10 min closes it with nothing shared |
+| Hiring-manager sign-off | **Real.** Approve / reject the rewritten post (`POST /employer/rewrite-filter/{id}/decision`), kept in process memory |
+| Inclusive matching (`/match`) | **Live on SAP HANA Cloud**, verified on a real instance: vector engine (`REAL_VECTOR`, `COSINE_SIMILARITY`). Embeddings come from a deterministic hashing embedder, not a model |
+| Learning pathway (`/route`) | Reads the skills graph from SAP HANA Cloud when configured; the least-hours path is computed in Python (no HANA Graph yet) |
+| Skills extraction, work-sample scoring, employer rewrite | A live LLM behind one interface (`GENAI_PROVIDER`): **the Gemini API**, or an OpenAI-compatible gateway (OpenCode Zen, OpenRouter, NVIDIA NIM); otherwise labelled fixtures. The SAP AI Core client (XSUAA OAuth) is built and waits for an AI Core service key, which a BTP trial does not carry |
+| Market radar (pipeline agent) | Read from an **SAP Datasphere** view when configured (a sample dataset); otherwise the fixture, labelled `simulated` |
+| Market radar (HR console block) | Static fixture, labelled `simulated` |
+| Hosting | Manifests for **SAP BTP Cloud Foundry** (backend and frontend); see `docs/BTP_DEPLOY.md` |
 
 Every response carries `source: live | simulated | local`, and every agent event
 repeats it. **If a badge says `simulated`, it is a fixture.** We do not dress
-fixtures as SAP results.
-
-The SAP clients are real code — real HTTP, real OAuth, real response parsing,
-real failure handling. They are one environment variable away from running. That
-is the single largest gap in this submission and it is stated first for that
-reason.
+fixtures as SAP results, and `/health` names the GenAI provider (`"gemini"`)
+so a Gemini answer is never read as SAP AI Core.
 
 ---
 
@@ -135,15 +140,19 @@ No configuration is required. With no `.env` at all the service starts
 and nothing leaves the machine. Copy `backend/.env.example` to `backend/.env` to
 change anything.
 
-**Enable real SAP AI Core:**
+**Turn on the live services** (in `backend/.env`; `backend/.env.example` documents every variable):
 
 ```bash
+USE_MOCK_HANA=false            # + HANA_HOST, HANA_USER, HANA_PASSWORD
 USE_MOCK_GENAI=false
-GENAI_HUB_ENDPOINT=...        # SAP AI Core orchestration endpoint
-GENAI_HUB_CLIENT_ID=...       # from your SAP BTP keyspace
-GENAI_HUB_CLIENT_SECRET=...
-GENAI_HUB_MODEL=...
+GENAI_PROVIDER=gemini          # + GEMINI_API_KEY (backend only, never VITE_)
+USE_MOCK_MARKET=false          # + DATASPHERE_* (docs/DATASPHERE.md)
 ```
+
+`GENAI_PROVIDER` is `auto | gemini | compatible | sap`: `compatible` uses
+`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`, and `sap` the `GENAI_HUB_*`
+values. Before a demo, `python scripts/check_providers.py` makes the real calls
+and says which paths would answer live.
 
 Verify the posture at any time — this is the honest self-report:
 
@@ -153,26 +162,28 @@ curl http://127.0.0.1:8000/health
 
 ```json
 {"status":"ok",
- "genai":{"mode":"mock","source":"simulated","integration_status":"not_implemented"},
- "hana": {"mode":"mock","source":"simulated","integration_status":"not_implemented"}}
+ "hana":  {"mode":"mock","source":"simulated","integration_status":"not_implemented"},
+ "genai": {"mode":"mock","source":"simulated","integration_status":"not_implemented"},
+ "market":{"mode":"mock","source":"simulated","integration_status":"not_implemented"}}
 ```
 
 ---
 
-## The demo, in four moves
+## The demo, in five moves
 
-1. **Press `RUN PIPELINE`.** The hero is a live agent console, not a video. All
-   seven agents report in real time; the rail fills as each one finishes.
-2. **Read the counter.** In demo mode the run ends at `5/6 agents done`,
-   because the fixture stops Learning Pathway at `waiting_consent` — the human
-   gate — rather than auto-accepting it. Against the real backend the same run
-   reaches `6/6`. Both are honest: one is a fixture that pauses, the other is a
-   server that signs off.
-3. **Scroll to Stage 06 · Bias Audit.** You land on `PASS`, every twin delta at
-   `±0`. That is the control.
-4. **Flip `SIMULATE LEGACY ATS` and re-run.** Same candidate, same score. The
-   verdict goes amber, `max delta 6 > threshold 5`, and the offending rows light
-   up. *This is the moment the project exists for.*
+1. **Press `RUN PIPELINE`.** The hero is a live agent console, not a video. The
+   six agents report in real time (`6/6 agents done`), then the orchestrator
+   **stops and asks Kavya**: *share her Skill Passport with employers?* Nothing
+   is shared until she answers; in demo mode the answer stays on screen and says
+   so.
+2. **Score a work sample** for a skill that needs proof; a credential is issued at 70+.
+3. **The route map:** 3 skills, 45 hours, 4.5 weeks at 10 h/week.
+4. **Scroll to Stage 06 · Bias Audit.** You land on `PASS`, every twin delta at
+   `±0`. That is the control. **Flip `SIMULATE LEGACY ATS` and re-run.** Same
+   candidate, same score. The verdict goes amber, `max delta 6 > threshold 5`,
+   and the offending rows light up. *This is the moment the project exists for.*
+5. **The HR console:** the rewritten job post and the 12 candidates it had
+   hidden. The hiring manager **approves** it, and it is published.
 
 > **Lead with move 4.** A judge who only presses the default button sees a clean
 > pass and concludes the audit found nothing. The bias is behind a toggle.
@@ -182,16 +193,18 @@ curl http://127.0.0.1:8000/health
 ## Verification
 
 ```bash
-cd backend  && .venv/Scripts/python -m pytest    # 187 passed
+cd backend  && .venv/Scripts/python -m pytest    # 317 passed
              .venv/Scripts/python -m ruff check .
              .venv/Scripts/python -m mypy
-cd frontend && npm test                          # 116 passed
+cd frontend && npm test                          # 139 passed
              npm run lint && npm run typecheck && npm run build
 ```
 
-**303 tests, all passing.** The suites cover the parts that matter to a judge:
-the audit's threshold boundary, the guardrail's blocking rule, orchestrator
-failures that must not abort a run, and WebSocket replay.
+**456 tests, all passing.** The suites cover the parts that matter to a judge:
+the audit's threshold boundary and the exact legacy-screen numbers the deck
+quotes, the guardrail's blocking rule, the consent wait (yes, no, timeout, a
+second answer), orchestrator failures that must not abort a run, WebSocket
+replay, and every live service falling back to its labelled fixture.
 
 ---
 
@@ -199,17 +212,20 @@ failures that must not abort a run, and WebSocket replay.
 
 | Method | Path | Source |
 |---|---|---|
-| `GET` | `/health` | reports live/simulated posture per integration |
+| `GET` | `/health` | reports live/simulated posture per integration, and the GenAI provider |
 | `POST` | `/session/start` | opens a session, returns immediately |
 | `GET` | `/session/{id}` | full state, with replayable event history |
 | `WS` | `/session/{id}/stream` | agent events; `Last-Event-ID` resumes |
+| `POST` | `/session/{id}/consent` | Kavya's Two-Key answer `{accepted: bool}`; 409 if not waiting |
 | `POST` | `/audit/ghost-twin` | `local` — the counterfactual audit |
-| `POST` | `/skills/extract` | `simulated` → `live` with SAP credentials |
-| `POST` | `/skills/work-sample` | `simulated` → `live` with SAP credentials |
+| `POST` | `/skills/extract` | `simulated` → `live` with an LLM (Gemini or SAP AI Core) |
+| `POST` | `/skills/work-sample` | `simulated` → `live` with an LLM (Gemini or SAP AI Core) |
 | `GET` | `/route` | `simulated` → `live` with SAP HANA |
 | `POST` | `/match` | `simulated` → `live` with SAP HANA |
 | `GET` | `/market/displacement-radar` | `simulated` fixture, with disclaimer |
-| `POST` | `/employer/rewrite-filter` | `simulated` fixture, with disclaimer |
+| `POST` | `/employer/rewrite-filter` | fixture, or `live` LLM rewrite derived from a flagged audit |
+| `POST` | `/employer/rewrite-filter/{id}/decision` | hiring manager approves `{approved: bool}` or rejects |
+| `GET` | `/employer/rewrite-filter/{id}/decision` | the latest decision, 404 if none |
 
 ---
 
@@ -225,15 +241,18 @@ httpx, optional `hdbcli` for SAP HANA Cloud, pytest/ruff/mypy.
 backend/
   app/orchestrator.py      the 7-node graph
   app/domain/ghost_twin.py the audit — no LLM, pure Python
-  app/services/            genai_hub.py · hana_client.py · inclusive_matching.py
+  app/services/            genai_hub.py · gemini_client.py · openai_compatible.py · hana_client.py
+                           datasphere.py · inclusive_matching.py · consent.py
                            employer_rewrite.py (the LLM-backed filter rewrite)
-  app/api/                 12 endpoints
-  tests/                   199 tests
+  app/api/                 the endpoints above
+  manifest.yml             SAP BTP Cloud Foundry
 frontend/
-  src/components/          AgentConsole · GhostTwinPanel · PipelineAgentGrid
+  src/components/          AgentConsole · ConsentCard · GhostTwinPanel · PipelineAgentGrid
   src/pages/               WorkerApp · RouteMap · HRConsole
   src/styles/tokens.css    the design system: every value and why it is that one
   src/styles/classes.js    the shared class map
+  manifest.yml             SAP BTP Cloud Foundry (staticfile)
+docs/                      BTP_DEPLOY · DATASPHERE · BUILD_APPS guides, the Datasphere CSV
 ReRoute_PRD.md             product requirements
 ```
 
@@ -244,11 +263,13 @@ justification cannot drift away from the value it justifies.
 
 ## Known gaps
 
-- **No SAP credential has ever been supplied.** The AI Core and HANA clients have
-  never run against a live service. They are guarded by mock flags, and the
-  resilience suite proves the *fallbacks*, not the live responses.
-- The browser WebSocket path needs demo mode off to be reachable. Rehearse that
-  toggle before presenting.
+- **SAP AI Core has never run live.** We have no AI Core service key, so the LLM
+  answers come from the Gemini API; `/health` says so. HANA Cloud is verified
+  live for `/match`. The tests prove the *fallbacks*, not the live responses.
+- The live agent stream needs demo mode off. In demo mode the console plays a
+  recorded run of the real backend, message for message. Rehearse the toggle.
+- Sessions and hiring-manager decisions do not survive a restart (SQLite and
+  process memory; on Cloud Foundry the disk is ephemeral). Run one instance.
 - Role embeddings come from a deterministic hashing embedder, not a model.
 - Any `VITE_`-prefixed variable is inlined into the built bundle and is publicly
   readable, so no secret belongs there. (`.env` files *are* git-ignored, in
@@ -256,4 +277,4 @@ justification cannot drift away from the value it justifies.
 
 ## Licence
 
-Team Ncrypt · SRM University AP
+Team ReRoute · SRM University-AP
