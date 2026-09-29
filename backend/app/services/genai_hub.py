@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     # typing — the value itself is always the public httpx.USE_CLIENT_DEFAULT.
     from httpx._client import UseClientDefault
 
-from app.config import Settings
+from app.config import Settings, resolve_genai_provider
 from app.mocks.genai_fixtures import (
     CREDENTIAL_THRESHOLD,
     NEEDS_PROOF_TERMS,
@@ -186,15 +186,22 @@ def _post_orchestration(payload: dict[str, Any], settings: Settings) -> Any:
 
 
 def post_orchestration(payload: dict[str, Any], settings: Settings) -> Any:
-    """Send one orchestration request to the SAP Generative AI Hub.
+    """Send one chat request to whichever live provider is configured.
 
     Public because a second caller now shares it: the Employer Readiness filter
-    rewrite in ``app/services/employer_rewrite.py`` talks to the same endpoint
+    rewrite in ``app/services/employer_rewrite.py`` talks to the same provider
     with the same credentials and the same timeout. Keeping one function for
-    "how do we reach the Hub" is the point — if the auth shape or the timeout
+    "how do we reach a model" is the point — if the auth shape or the timeout
     changes, both callers change together instead of drifting apart.
 
-    Authentication is the two-step SAP AI Core flow when
+    Provider selection is ``app.config.resolve_genai_provider``. The SAP
+    Generative AI Hub is the default and the intended production path; Gemini
+    is the fallback for environments where no AI Core key is obtainable (a
+    BTP trial account does not carry SAP AI Core). Both return the same
+    OpenAI-style envelope, so everything above this function is
+    provider-agnostic.
+
+    SAP authentication is the two-step AI Core flow when
     ``GENAI_HUB_AUTH_URL`` is set: mint a bearer token with
     ``grant_type=client_credentials``, then send it as ``Authorization:
     Bearer``. With that variable blank the call falls back to HTTP Basic, which
@@ -205,6 +212,15 @@ def post_orchestration(payload: dict[str, Any], settings: Settings) -> Any:
     httpx.HTTPError when a call itself fails. Callers are expected to degrade
     to a labelled fixture rather than let either propagate.
     """
+    if resolve_genai_provider(settings) == "gemini":
+        from app.services import gemini_client
+
+        return gemini_client.post_generate_content(payload, settings)
+    return _post_to_sap(payload, settings)
+
+
+def _post_to_sap(payload: dict[str, Any], settings: Settings) -> Any:
+    """The SAP Generative AI Hub request, auth and headers unchanged."""
     _require_live_configuration(settings)
     timeout = settings.genai_hub_timeout_seconds
     # Exactly one auth shape per request: a bearer token when a token endpoint

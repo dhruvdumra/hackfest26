@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal, cast
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,6 +27,20 @@ class Settings(BaseSettings):
     genai_hub_client_secret: SecretStr = SecretStr("")
     genai_hub_model: str = ""
     genai_hub_timeout_seconds: float = Field(default=8.0, gt=0)
+    # Which live provider the LLM calls go to. "auto" resolves to Gemini when
+    # GEMINI_API_KEY is set and the SAP Hub otherwise, so a laptop with one
+    # provider configured and the other not just works.
+    genai_provider: Literal["auto", "sap", "gemini"] = "auto"
+    # Google AI Studio key, from aistudio.google.com -> Get API key. The free
+    # tier needs no billing account. Held as a SecretStr and never logged.
+    gemini_api_key: SecretStr = SecretStr("")
+    # Any model the key can reach. gemini-2.5-flash is the safe default; the
+    # free tier's per-day quota is small, so check AI Studio's rate-limit page
+    # before demoing rather than discovering it on stage.
+    gemini_model: str = "gemini-2.5-flash"
+    # Generative Language API v1beta base. Overridable for regional endpoints
+    # and for tests; the path is the model, not a deployment.
+    gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta"
     # Token endpoint for the client-credentials exchange. The SAP trial
     # onboarding email calls it the "Token URL" and gives it as a bare XSUAA
     # host, e.g. https://<tenant>.authentication.<region>.hana.ondemand.com.
@@ -68,3 +83,43 @@ def hana_is_configured(settings: Settings) -> bool:
             settings.hana_password.get_secret_value(),
         )
     )
+
+
+def genai_is_configured(settings: Settings) -> bool:
+    """Report whether a live LLM provider is actually reachable from config.
+
+    True when the selected provider has every value it needs. A partial
+    configuration is False rather than an error, because a half-filled
+    GENAI_HUB_* block should send the caller to the labelled fixture rather
+    than to an exception on stage.
+    """
+    match resolve_genai_provider(settings):
+        case "gemini":
+            return bool(settings.gemini_api_key.get_secret_value().strip())
+        case "sap":
+            return all(
+                value.strip()
+                for value in (
+                    settings.genai_hub_endpoint,
+                    settings.genai_hub_client_id,
+                    settings.genai_hub_client_secret.get_secret_value(),
+                    settings.genai_hub_model,
+                )
+            )
+
+
+def resolve_genai_provider(settings: Settings) -> Literal["gemini", "sap"]:
+    """Decide which provider this process talks to.
+
+    "auto" prefers Gemini when a key is present, because it is the one a laptop
+    can actually get in under a minute, and falls back to the SAP Hub. An
+    explicit "sap" or "gemini" is honoured even when that provider is not
+    configured, so a misconfigured explicit choice produces the honest
+    "missing configuration" error instead of silently using a different
+    provider than the operator asked for.
+    """
+    if settings.genai_provider in {"sap", "gemini"}:
+        return cast('Literal["sap", "gemini"]', settings.genai_provider)
+    if settings.gemini_api_key.get_secret_value().strip():
+        return "gemini"
+    return "sap"
