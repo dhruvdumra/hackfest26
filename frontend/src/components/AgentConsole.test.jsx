@@ -40,16 +40,16 @@ describe('AgentConsole', () => {
 
     const log = screen.getByRole('list', { name: 'Agent event stream' })
     expect(within(log).getAllByRole('listitem')).toHaveLength(3)
-    // The orchestrator opens a stage with `running` and closes it with `done`,
+    // Skills Discovery opens its stage with `running` and closes it with `done`,
     // so its name legitimately appears on two of the three rows.
-    expect(within(log).getAllByText('ORCHESTRATOR')).toHaveLength(2)
-    expect(within(log).getByText('Session opened for Kavya · demo transcript received')).toBeInTheDocument()
+    expect(within(log).getAllByText('SKILLS DISCOVERY')).toHaveLength(2)
+    expect(within(log).getByText('Session opened for Kavya · 7 agents queued')).toBeInTheDocument()
     expect(within(log).getByText('00:00')).toBeInTheDocument()
   })
 
   it('caps the visible rows but reports the true event total', () => {
     const events = normalizeAll(MOCK_AGENT_EVENTS)
-    // MOCK_AGENT_EVENTS is 14 events, so this also proves the cap is below the
+    // MOCK_AGENT_EVENTS is 15 events, so this also proves the cap is below the
     // fixture length rather than coincidentally equal to it.
     expect(events.length).toBeGreaterThan(10)
 
@@ -59,8 +59,8 @@ describe('AgentConsole', () => {
     expect(within(log).getAllByRole('listitem')).toHaveLength(10)
     expect(screen.getByText(`${events.length} events`)).toBeInTheDocument()
     // The newest event survives the cap; the oldest does not.
-    expect(within(log).getByText('PASS · maximum score delta 2 points')).toBeInTheDocument()
-    expect(within(log).queryByText('Session opened for Kavya · demo transcript received')).toBeNull()
+    expect(within(log).getByText('PASS · maximum score delta 0 points')).toBeInTheDocument()
+    expect(within(log).queryByText('Session opened for Kavya · 7 agents queued')).toBeNull()
   })
 
   it('fills a rail tick only for agents that have reported done', () => {
@@ -114,8 +114,8 @@ describe('AgentConsole', () => {
   })
 
   it('never counts the orchestrator, which is not one of the six rail agents', () => {
-    // The orchestrator reports `done` twice in the fixture and is deliberately
-    // absent from the rail. Counting it put the footer at "7/6 agents done" on a
+    // The orchestrator reports `done` in the fixture and is deliberately absent
+    // from the rail. Counting it put the footer at "7/6 agents done" on a
     // finished run, disagreeing with the six ticks directly above it.
     const events = normalizeAll(MOCK_AGENT_EVENTS)
     expect(
@@ -124,11 +124,7 @@ describe('AgentConsole', () => {
 
     render(<AgentConsole events={events} />)
 
-    // 5/6, not 6/6, and that is the run being reported honestly: the learning
-    // pathway ends on `waiting_consent` — the human gate — and never reports
-    // `done`. The figure is derived from the events, so the console shows the
-    // pipeline as it actually stopped rather than as a clean sweep.
-    expect(screen.getByText('5/6 agents done')).toBeInTheDocument()
+    expect(screen.getByText('6/6 agents done')).toBeInTheDocument()
     expect(screen.queryByText(/7\/6/)).toBeNull()
   })
 
