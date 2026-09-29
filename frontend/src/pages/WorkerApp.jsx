@@ -18,6 +18,7 @@ import {
 } from '../styles/classes.js'
 import { Button } from '../components/Button.jsx'
 import { Card } from '../components/Card.jsx'
+import ConsentCard from '../components/ConsentCard.jsx'
 import Field from '../components/Field.jsx'
 import Select from '../components/Select.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
@@ -190,6 +191,8 @@ export default function WorkerApp({
   events = EMPTY_EVENTS,
   isStreaming = false,
   runSignal = 0,
+  liveSession = false,
+  onLocalConsent,
 }) {
   const [transcript, setTranscript] = useState(KAVYA_TRANSCRIPT)
   const [session, setSession] = useState(null)
@@ -539,6 +542,14 @@ export default function WorkerApp({
             </p>
           )}
         </div>
+
+        <ConsentCard
+          events={events}
+          live={liveSession}
+          sessionId={activeSessionId}
+          baseUrl={baseUrl}
+          onLocalDecision={onLocalConsent}
+        />
 
         {hasSession ? null : (
           <div className="border-t border-graphite pt-8" role="status">

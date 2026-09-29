@@ -1,6 +1,8 @@
 // Offline copy of one real backend run for Kavya (mock settings), message for
 // message and in the backend's order. The pitch deck quotes these numbers, so
 // if a backend change alters one, re-run the pipeline and update this and the deck.
+// It stops where the backend does: waiting for Kavya's Two-Key answer, which the
+// consent card then closes on screen.
 export const MOCK_AGENT_EVENTS = [
   {
     agent: 'ORCHESTRATOR',
@@ -83,13 +85,8 @@ export const MOCK_AGENT_EVENTS = [
   {
     agent: 'ORCHESTRATOR',
     status: 'waiting_consent',
-    message: 'Confirm the two keys: evidence disclosure and the re-routed plan',
+    message: 'Waiting for Kavya: share her Skill Passport with employers?',
     timestamp: '00:14',
-  },
-  {
-    agent: 'ORCHESTRATOR',
-    status: 'done',
-    message: 'Demo sign-off recorded · the re-routed plan is ready for review',
-    timestamp: '00:15',
+    data: { blocking: true },
   },
 ]

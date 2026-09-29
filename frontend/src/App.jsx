@@ -14,6 +14,7 @@ import { useDemoMode } from './context/DemoModeContext.jsx'
 import { startSession } from './api.js'
 import { useSessionStream } from './hooks/useSessionStream.js'
 import { useAgentStream } from './hooks/useAgentStream.js'
+import { normalizeAgentEvent } from './domain/agentEvents.js'
 import HRConsole from './pages/HRConsole.jsx'
 import RouteMap from './pages/RouteMap.jsx'
 import WorkerApp from './pages/WorkerApp.jsx'
@@ -29,6 +30,12 @@ import {
   subheadingClass,
   typeDisplayClass,
 } from './styles/classes.js'
+
+// The orchestrator's own closing lines, so a demo-mode answer reads the same.
+const LOCAL_CONSENT_MESSAGES = {
+  accepted: 'Kavya said yes · her Skill Passport is shared with employers',
+  declined: 'Kavya said no · her Skill Passport stays private',
+}
 
 const DEMO_STAGES = [
   { label: 'Understand', description: 'Recover durable skills' },
@@ -232,12 +239,38 @@ export default function App() {
   })
 
   const usingLiveTransport = !demoMode && Boolean(sessionId)
-  const events = usingLiveTransport ? stream.events : fallback.events
+  // In demo mode there is no session to answer the Two-Key question, so the
+  // answer is closed out here, on screen only, the way the orchestrator would.
+  const [localConsentEvent, setLocalConsentEvent] = useState(null)
+  const events = useMemo(() => {
+    if (usingLiveTransport) {
+      return stream.events
+    }
+
+    return localConsentEvent === null
+      ? fallback.events
+      : [...fallback.events, localConsentEvent]
+  }, [usingLiveTransport, stream.events, fallback.events, localConsentEvent])
+
+  const handleLocalConsent = useCallback((decision) => {
+    setLocalConsentEvent(
+      normalizeAgentEvent(
+        {
+          agent: 'ORCHESTRATOR',
+          status: 'done',
+          message: LOCAL_CONSENT_MESSAGES[decision],
+          data: { consent: decision, terminal: true },
+        },
+        { streamId: 'demo-consent' },
+      ),
+    )
+  }, [])
 
   const handleSessionStart = useCallback(
     async (payload) => {
       setIsStarting(true)
       setStartError('')
+      setLocalConsentEvent(null)
       try {
         const started = await startSession(payload, { baseUrl: backendBaseUrl })
         setSessionId(started.session_id)
@@ -472,6 +505,8 @@ export default function App() {
                 events={events}
                 isStreaming={isStreaming}
                 runSignal={runSignal}
+                liveSession={usingLiveTransport}
+                onLocalConsent={handleLocalConsent}
               />
             </div>
             {startError === '' ? null : (

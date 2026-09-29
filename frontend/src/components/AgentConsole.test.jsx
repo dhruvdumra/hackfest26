@@ -49,7 +49,7 @@ describe('AgentConsole', () => {
 
   it('caps the visible rows but reports the true event total', () => {
     const events = normalizeAll(MOCK_AGENT_EVENTS)
-    // MOCK_AGENT_EVENTS is 15 events, so this also proves the cap is below the
+    // MOCK_AGENT_EVENTS is 14 events, so this also proves the cap is below the
     // fixture length rather than coincidentally equal to it.
     expect(events.length).toBeGreaterThan(10)
 
@@ -59,7 +59,9 @@ describe('AgentConsole', () => {
     expect(within(log).getAllByRole('listitem')).toHaveLength(10)
     expect(screen.getByText(`${events.length} events`)).toBeInTheDocument()
     // The newest event survives the cap; the oldest does not.
-    expect(within(log).getByText('PASS · maximum score delta 0 points')).toBeInTheDocument()
+    expect(
+      within(log).getByText('Waiting for Kavya: share her Skill Passport with employers?'),
+    ).toBeInTheDocument()
     expect(within(log).queryByText('Session opened for Kavya · 7 agents queued')).toBeNull()
   })
 
@@ -114,10 +116,13 @@ describe('AgentConsole', () => {
   })
 
   it('never counts the orchestrator, which is not one of the six rail agents', () => {
-    // The orchestrator reports `done` in the fixture and is deliberately absent
-    // from the rail. Counting it put the footer at "7/6 agents done" on a
+    // The orchestrator reports `done` once Kavya answers, and is deliberately
+    // absent from the rail. Counting it put the footer at "7/6 agents done" on a
     // finished run, disagreeing with the six ticks directly above it.
-    const events = normalizeAll(MOCK_AGENT_EVENTS)
+    const events = normalizeAll([
+      ...MOCK_AGENT_EVENTS,
+      { agent: 'ORCHESTRATOR', status: 'done', message: 'Kavya said yes', timestamp: '00:15' },
+    ])
     expect(
       events.some((event) => event.agent === 'ORCHESTRATOR' && event.status === 'done'),
     ).toBe(true)

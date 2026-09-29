@@ -23,6 +23,13 @@ describe('MOCK_AGENT_EVENTS', () => {
     ])
   })
 
+  it('ends by asking Kavya, not by answering for her', () => {
+    const last = MOCK_AGENT_EVENTS.at(-1)
+
+    expect(last.agent).toBe('ORCHESTRATOR')
+    expect(last.status).toBe('waiting_consent')
+  })
+
   it('quotes the numbers the pitch deck shows', () => {
     const doneMessage = (agent) =>
       MOCK_AGENT_EVENTS.find((event) => event.agent === agent && event.status === 'done').message

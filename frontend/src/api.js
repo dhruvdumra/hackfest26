@@ -224,6 +224,17 @@ export function getSession(id, options) {
   })
 }
 
+export function decideConsent(id, accepted, options) {
+  const { baseUrl, signal } = options ?? {}
+
+  return requestJson(`/session/${encodeURIComponent(String(id ?? ''))}/consent`, {
+    method: 'POST',
+    body: { accepted: accepted === true },
+    baseUrl,
+    signal,
+  })
+}
+
 export function extractSkills(payload, options) {
   const { baseUrl, signal } = options ?? {}
 
