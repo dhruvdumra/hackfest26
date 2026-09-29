@@ -48,6 +48,7 @@ def fixture_rows() -> list[tuple[Any, ...]]:
 def live_settings(**overrides: Any) -> Settings:
     values: dict[str, Any] = {
         "use_mock_market": False,
+        "market_provider": "datasphere",
         "datasphere_host": "tenant.hana.prod-eu10.hanacloud.ondemand.com",
         "datasphere_user": "REROUTE#READER",
         "datasphere_password": "not-a-real-password",

@@ -14,7 +14,7 @@ so moving it into Datasphere changes where it comes from, not what it says.
 import asyncio
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Final, cast
 
 from pydantic import JsonValue
@@ -65,32 +65,43 @@ async def market_brief_async(city: str, settings: Settings) -> dict[str, JsonVal
 
 
 def _live_brief(city: str, settings: Settings) -> dict[str, JsonValue]:
-    schema = _identifier(settings.datasphere_schema)
-    view = _identifier(settings.datasphere_view)
+    schema = safe_identifier(settings.datasphere_schema)
+    view = safe_identifier(settings.datasphere_view)
     connection = _connect(settings)
     try:
         cursor = connection.cursor()
         try:
             cursor.execute(f'SELECT * FROM "{schema}"."{view}"')
-            columns = [str(column[0]).casefold() for column in cursor.description or ()]
+            columns = [str(column[0]) for column in cursor.description or ()]
             rows = [dict(zip(columns, row, strict=False)) for row in cursor.fetchall() or []]
         finally:
             cursor.close()
     finally:
         connection.close()
+    return brief_from_rows(rows, city, provider=PROVIDER, disclaimer=DISCLAIMER)
 
-    entries = sorted((_entry(row) for row in rows), key=lambda item: item[0])
+
+def brief_from_rows(
+    rows: Sequence[Mapping[str, Any]], city: str, *, provider: str, disclaimer: str
+) -> dict[str, JsonValue]:
+    """Turn radar rows from any SAP source into the brief the agent reports.
+
+    Column names are matched case-insensitively. Every row must be usable and at
+    least one must exist, otherwise this raises and the caller serves the fixture.
+    """
+    lowered = [{str(key).casefold(): value for key, value in row.items()} for row in rows]
+    entries = sorted((_entry(row) for row in lowered), key=lambda item: item[0])
     if not entries:
-        raise DatasphereUnavailableError("the Datasphere radar view returned no rows")
+        raise DatasphereUnavailableError("the radar source returned no rows")
     wanted = city.strip().casefold()
     in_city = [entry for _, entry in entries if str(entry["city"]).casefold() == wanted]
     # An unknown city shows the whole radar, exactly as the fixture does.
     selected = (in_city or [entry for _, entry in entries])[: market_fixtures.MAX_ENTRIES]
     return {
         "source": "live",
-        "provider": PROVIDER,
+        "provider": provider,
         "city": city.strip() or market_fixtures.DEFAULT_CITY,
-        "disclaimer": DISCLAIMER,
+        "disclaimer": disclaimer,
         "entry_count": len(selected),
         "openings": sum(cast(int, entry["openings"]) for entry in selected),
         "entry_demand": [entry["demand"] for entry in selected],
@@ -115,7 +126,7 @@ def _entry(row: Mapping[str, Any]) -> tuple[int, dict[str, JsonValue]]:
     return int(row.get("rank", 0)), entry
 
 
-def _identifier(value: str) -> str:
+def safe_identifier(value: str) -> str:
     name = value.strip()
     if not _IDENTIFIER.match(name):
         raise DatasphereUnavailableError(f"unsafe Datasphere identifier {name!r}")

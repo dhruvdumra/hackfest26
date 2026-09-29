@@ -76,11 +76,11 @@ from app.models import (
     SkillPassport,
 )
 from app.services import (
-    datasphere,
     employer_rewrite,
     genai_hub,
     inclusive_matching,
     learning_pathway,
+    market_radar,
 )
 from app.services.consent import (
     CONSENT_STATE_KEY,
@@ -381,9 +381,10 @@ async def _market_intelligence(state: OrchestrationState) -> OrchestrationState:
             data={"phase": "market_intelligence", "city": city},
             source="simulated",
         )
-        brief = await datasphere.market_brief_async(city, state["settings"])
-        live = brief.get("source") == "live"
-        rows = "radar rows from SAP Datasphere" if live else "simulated radar rows"
+        brief = await market_radar.market_brief_async(city, state["settings"])
+        source_name = market_radar.source_name(brief)
+        live = source_name is not None
+        rows = f"radar rows from {source_name}" if live else "simulated radar rows"
         await _update_session(store, session_id, state_entry=("market_intelligence", brief))
         await emitter.emit(
             agent="MARKET INTELLIGENCE",

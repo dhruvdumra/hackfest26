@@ -6,14 +6,27 @@ radar (`docs/datasphere/market_radar.csv`), so the deck's numbers do not
 change: **4 radar rows, 28 openings in Chennai**.
 
 What changes on stage: the agent says *"4 radar rows from SAP Datasphere · 28
-openings in Chennai"* with a **live** badge, instead of *"4 simulated radar rows"*.
+openings in Chennai"* with a **live** badge.
 
-## 0. Get a tenant
+**Already live without Datasphere:** by default (`MARKET_PROVIDER=hana`) the
+agent reads the same radar from a `MARKET_RADAR` table on our SAP HANA Cloud
+instance (*"4 radar rows from SAP HANA Cloud"*). Load it with
+`python scripts/load_market_radar_hana.py`. Datasphere is the upgrade, set with
+`MARKET_PROVIDER=datasphere`.
 
-Use the SAP Datasphere trial from sap.com (search "SAP Datasphere trial"). It
-is 30 days and emails you a tenant URL. Provisioning can take a while, so start
-it first. Until it is ready, the backend keeps serving the fixture with the
-**simulated** label, so nothing breaks while you wait.
+## 0. Get a tenant (read this first)
+
+- The **free Datasphere / Business Data Cloud trial** (sap.com → Try now) is a
+  *shared tenant with sample data*. SAP says admin and integration rights are
+  not included, so steps 1 and 4 (your own space, a database user) may be
+  blocked. Try it; if you cannot create a space, stop here and keep HANA.
+- A **full tenant** is the 90-day *free tier* plan, which needs a BTP
+  Pay-As-You-Go or enterprise account (credit card; one free tenant), and
+  provisioning can take hours.
+- A plain BTP trial account does not include Datasphere.
+
+Until a tenant is ready, the HANA table (or the fixture) keeps serving, so
+nothing breaks while you wait.
 
 ## 1. Create the space
 

@@ -73,10 +73,14 @@ class Settings(BaseSettings):
     # is considered stale, so a token cannot expire mid-request. Blank or unset
     # -> 30.0. Must be >= 0.
     genai_hub_token_expiry_margin_seconds: float = Field(default=30.0, ge=0)
-    # Market Intelligence reads its radar from an SAP Datasphere view exposed
-    # for consumption, through a Datasphere database user (space schema + view).
-    # USE_MOCK_MARKET=true, or any blank value below, keeps the bundled fixture.
+    # Market Intelligence reads its radar from SAP when USE_MOCK_MARKET=false:
+    # `hana` (default) is the MARKET_RADAR table on the HANA Cloud instance above,
+    # loaded by scripts/load_market_radar_hana.py; `datasphere` is a view exposed
+    # for consumption, read through a Datasphere database user (values below).
+    # USE_MOCK_MARKET=true, or a missing detail, keeps the bundled fixture.
     use_mock_market: bool = True
+    market_provider: Literal["hana", "datasphere"] = "hana"
+    hana_market_table: str = "MARKET_RADAR"
     datasphere_host: str = ""
     datasphere_port: int = Field(default=443, ge=1, le=65535)
     datasphere_user: str = ""
@@ -181,8 +185,7 @@ def resolve_genai_provider(settings: Settings) -> Literal["gemini", "compatible"
     if settings.gemini_api_key.get_secret_value().strip():
         return "gemini"
     if all(
-        value.strip()
-        for value in (settings.llm_base_url, settings.llm_api_key.get_secret_value())
+        value.strip() for value in (settings.llm_base_url, settings.llm_api_key.get_secret_value())
     ):
         return "compatible"
     return "sap"

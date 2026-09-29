@@ -24,8 +24,12 @@ def health(settings: SettingsDependency) -> HealthResponse:
         genai=genai.model_copy(update={"provider": _genai_provider(settings)}),
         market=market
         if settings.use_mock_market
-        else market.model_copy(update={"provider": "sap_datasphere"}),
+        else market.model_copy(update={"provider": _market_provider(settings)}),
     )
+
+
+def _market_provider(settings: Settings) -> str:
+    return "sap_datasphere" if settings.market_provider == "datasphere" else "sap_hana_cloud"
 
 
 def _hana_integration_status(settings: Settings) -> IntegrationStatus:
@@ -51,7 +55,11 @@ def _genai_provider(settings: Settings) -> str | None:
 def _market_integration_status(settings: Settings) -> IntegrationStatus:
     if settings.use_mock_market:
         return "not_implemented"
-    return "configured" if datasphere_is_configured(settings) else "not_implemented"
+    if settings.market_provider == "datasphere":
+        configured = datasphere_is_configured(settings)
+    else:
+        configured = not settings.use_mock_hana and hana_is_configured(settings)
+    return "configured" if configured else "not_implemented"
 
 
 def _integration_status(

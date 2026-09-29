@@ -78,7 +78,7 @@ Stated plainly, because a judge should not have to guess.
 | Inclusive matching (`/match`) | **Live on SAP HANA Cloud**, verified on a real instance: vector engine (`REAL_VECTOR`, `COSINE_SIMILARITY`). Embeddings come from a deterministic hashing embedder, not a model |
 | Learning pathway (`/route`) | Reads the skills graph from SAP HANA Cloud when configured; the least-hours path is computed in Python (no HANA Graph yet) |
 | Skills extraction, work-sample scoring, employer rewrite | A live LLM behind one interface (`GENAI_PROVIDER`): **the Gemini API**, or an OpenAI-compatible gateway (OpenCode Zen, OpenRouter, NVIDIA NIM); otherwise labelled fixtures. The SAP AI Core client (XSUAA OAuth) is built and waits for an AI Core service key, which a BTP trial does not carry |
-| Market radar (pipeline agent) | Read from an **SAP Datasphere** view when configured (a sample dataset); otherwise the fixture, labelled `simulated` |
+| Market radar (pipeline agent) | **Live on SAP HANA Cloud** (`MARKET_RADAR` table, a sample dataset loaded by `scripts/load_market_radar_hana.py`), or an **SAP Datasphere** view with `MARKET_PROVIDER=datasphere`; otherwise the fixture, labelled `simulated` |
 | Market radar (HR console block) | Static fixture, labelled `simulated` |
 | Hosting | Manifests for **SAP BTP Cloud Foundry** (backend and frontend); see `docs/BTP_DEPLOY.md` |
 
@@ -146,7 +146,7 @@ change anything.
 USE_MOCK_HANA=false            # + HANA_HOST, HANA_USER, HANA_PASSWORD
 USE_MOCK_GENAI=false
 GENAI_PROVIDER=gemini          # + GEMINI_API_KEY (backend only, never VITE_)
-USE_MOCK_MARKET=false          # + DATASPHERE_* (docs/DATASPHERE.md)
+USE_MOCK_MARKET=false          # HANA table by default; MARKET_PROVIDER=datasphere + DATASPHERE_*
 ```
 
 `GENAI_PROVIDER` is `auto | gemini | compatible | sap`: `compatible` uses
@@ -193,14 +193,14 @@ curl http://127.0.0.1:8000/health
 ## Verification
 
 ```bash
-cd backend  && .venv/Scripts/python -m pytest    # 317 passed
+cd backend  && .venv/Scripts/python -m pytest    # 326 passed
              .venv/Scripts/python -m ruff check .
              .venv/Scripts/python -m mypy
 cd frontend && npm test                          # 139 passed
              npm run lint && npm run typecheck && npm run build
 ```
 
-**456 tests, all passing.** The suites cover the parts that matter to a judge:
+**465 tests, all passing.** The suites cover the parts that matter to a judge:
 the audit's threshold boundary and the exact legacy-screen numbers the deck
 quotes, the guardrail's blocking rule, the consent wait (yes, no, timeout, a
 second answer), orchestrator failures that must not abort a run, WebSocket
