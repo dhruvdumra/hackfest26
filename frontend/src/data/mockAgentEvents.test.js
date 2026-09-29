@@ -24,15 +24,15 @@ describe('MOCK_AGENT_EVENTS', () => {
   })
 
   it('ends by asking Kavya, not by answering for her', () => {
-    const last = MOCK_AGENT_EVENTS.at(-1)
+    const last = MOCK_AGENT_EVENTS[MOCK_AGENT_EVENTS.length - 1]
 
-    expect(last.agent).toBe('ORCHESTRATOR')
-    expect(last.status).toBe('waiting_consent')
+    expect(last?.agent).toBe('ORCHESTRATOR')
+    expect(last?.status).toBe('waiting_consent')
   })
 
   it('quotes the numbers the pitch deck shows', () => {
     const doneMessage = (agent) =>
-      MOCK_AGENT_EVENTS.find((event) => event.agent === agent && event.status === 'done').message
+      MOCK_AGENT_EVENTS.find((event) => event.agent === agent && event.status === 'done')?.message
 
     expect(doneMessage('SKILLS DISCOVERY')).toMatch(/^8 skill claims .* 2 awaiting proof/)
     expect(doneMessage('MARKET INTELLIGENCE')).toMatch(/^4 .*radar rows · 28 openings in Chennai$/)

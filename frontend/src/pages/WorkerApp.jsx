@@ -184,6 +184,9 @@ function getSpeechRecognitionConstructor() {
   return null
 }
 
+/** Default for a parent that does not close demo-mode consent itself. */
+function ignoreLocalConsent(_decision) {}
+
 export default function WorkerApp({
   baseUrl = '',
   sessionId,
@@ -192,7 +195,7 @@ export default function WorkerApp({
   isStreaming = false,
   runSignal = 0,
   liveSession = false,
-  onLocalConsent,
+  onLocalConsent = ignoreLocalConsent,
 }) {
   const [transcript, setTranscript] = useState(KAVYA_TRANSCRIPT)
   const [session, setSession] = useState(null)

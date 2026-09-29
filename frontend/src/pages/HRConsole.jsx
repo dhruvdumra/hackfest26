@@ -602,7 +602,9 @@ function RewriteBlock({
                 decision={decision}
                 error={decisionError}
                 isDeciding={isDeciding}
-                onDecide={onDecide}
+                onDecide={(approved) =>
+                  onDecide(asText(rewrite.job_post_id, jobPostId), approved)
+                }
               />
             )}
 
@@ -780,9 +782,7 @@ export default function HRConsole({ baseUrl = '' }) {
     void loadRewrite(jobPostId)
   }
 
-  async function handleDecide(approved) {
-    const postId = asText(rewrite?.job_post_id, jobPostId)
-
+  async function handleDecide(postId, approved) {
     setIsDeciding(true)
     setDecisionError('')
 
