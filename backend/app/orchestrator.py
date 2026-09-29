@@ -981,7 +981,7 @@ def _candidate_profile(city: str, skill_score: int) -> GhostTwinCandidateProfile
         career_gap=CareerGap(months=18),
         gender="female",
         age=29,
-        college_tier="tier_2",
+        college_tier="tier_3",
         city=city,
         skill_score=skill_score,
     )
