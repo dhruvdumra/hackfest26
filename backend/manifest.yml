@@ -27,6 +27,8 @@ applications:
       USE_MOCK_HANA: "false"
       USE_MOCK_GENAI: "false"
       GENAI_PROVIDER: gemini
+      # Falls back to the labelled fixture until the DATASPHERE_* values are set.
+      USE_MOCK_MARKET: "false"
       GHOST_TWIN_THRESHOLD: "5"
       CONSENT_TIMEOUT_SECONDS: "600"
       # SQLite on Cloud Foundry is ephemeral: sessions reset on every restart,
