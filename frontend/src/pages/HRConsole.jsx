@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { getDisplacementRadar, rewriteEmployerFilter } from '../api.js'
+import {
+  decideEmployerRewrite,
+  getDisplacementRadar,
+  rewriteEmployerFilter,
+} from '../api.js'
 import {
   bodyClass,
   bodyCopyClass,
@@ -324,6 +328,85 @@ function FilterPanel({ heading, headingId, text, children }) {
   )
 }
 
+function formatDecisionTime(decidedAt) {
+  const parsed = new Date(decidedAt)
+
+  return Number.isNaN(parsed.getTime())
+    ? ''
+    : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+/**
+ * The human gate on the employer side: nothing ReRoute rewrites is published
+ * until a hiring manager signs it off. The decision is recorded by the backend
+ * (`source=local`), not by an ATS.
+ */
+function SignOffBlock({ decision, error, isDeciding, onDecide }) {
+  return (
+    <div className={`mt-12 border-t ${ruleClass} pt-8`}>
+      <h3 className={sectionHeadingClass}>Hiring manager sign-off</h3>
+      {decision ? (
+        <>
+          <p
+            className={`mt-3 ${headingSmClass} ${chalkClass}`}
+            data-testid="rewrite-decision"
+            role="status"
+          >
+            {asText(decision.message, 'Decision recorded')}
+          </p>
+          <div className={`mt-4 ${metaRowClass}`}>
+            <span>{`decision=${asText(decision.decision, 'recorded')}`}</span>
+            <span aria-hidden="true">·</span>
+            <span>source=local</span>
+            {formatDecisionTime(decision.decided_at) === '' ? null : (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{formatDecisionTime(decision.decided_at)}</span>
+              </>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className={`mt-3 ${bodyCopyClass}`}>
+            Nothing is published until a person signs it off. Approve to publish
+            the rewritten post, or reject it and the rewrite stays unpublished.
+          </p>
+          <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="glossy"
+              arrow="↗"
+              onClick={() => onDecide(true)}
+              disabled={isDeciding}
+              aria-busy={isDeciding}
+            >
+              Approve and publish
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onDecide(false)}
+              disabled={isDeciding}
+            >
+              Reject
+            </Button>
+          </div>
+          {error === '' ? null : (
+            <p
+              className={`mt-4 max-w-[40rem] text-left ${bodyClass} ${chalkClass}`}
+              data-testid="rewrite-decision-error"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function RewriteBlock({
   jobPostId,
   isLoading,
@@ -332,6 +415,10 @@ function RewriteBlock({
   className = '',
   onJobPostChange,
   onSubmit,
+  decision,
+  decisionError,
+  isDeciding,
+  onDecide,
 }) {
   const hiddenTalentCount = rewrite ? asCount(rewrite.hidden_talent_count) : null
   const removedCriteria = rewrite ? asList(rewrite.removed_criteria) : []
@@ -509,6 +596,15 @@ function RewriteBlock({
               </p>
             </div>
 
+            {noHiddenTalent ? null : (
+              <SignOffBlock
+                decision={decision}
+                error={decisionError}
+                isDeciding={isDeciding}
+                onDecide={onDecide}
+              />
+            )}
+
             <div className={`mt-12 border-t ${ruleClass} pt-8`}>
               <h3 id="removed-criteria-title" className={sectionHeadingClass}>
                 Criteria removed ({removedCriteria.length})
@@ -562,6 +658,9 @@ export default function HRConsole({ baseUrl = '' }) {
   const [rewrite, setRewrite] = useState(EMPTY_RESULT)
   const [rewriteError, setRewriteError] = useState('')
   const [isRewriteLoading, setIsRewriteLoading] = useState(true)
+  const [decision, setDecision] = useState(EMPTY_RESULT)
+  const [decisionError, setDecisionError] = useState('')
+  const [isDeciding, setIsDeciding] = useState(false)
 
   // Each panel keeps the in-flight request so a newer submit cancels the older
   // one. Without this, two quick submits can resolve out of order and the stale
@@ -625,6 +724,8 @@ export default function HRConsole({ baseUrl = '' }) {
     setIsRewriteLoading(true)
     setRewriteError('')
     setRewrite(EMPTY_RESULT)
+    setDecision(EMPTY_RESULT)
+    setDecisionError('')
 
     try {
       const response = await rewriteEmployerFilter(nextJobPostId, {
@@ -654,6 +755,23 @@ export default function HRConsole({ baseUrl = '' }) {
   function handleRewriteSubmit(event) {
     event.preventDefault()
     void loadRewrite(jobPostId)
+  }
+
+  async function handleDecide(approved) {
+    const postId = asText(rewrite?.job_post_id, jobPostId)
+
+    setIsDeciding(true)
+    setDecisionError('')
+
+    try {
+      setDecision(await decideEmployerRewrite(postId, approved, { baseUrl }))
+    } catch (requestError) {
+      setDecisionError(
+        formatErrorMessage(requestError, 'The decision could not be recorded. Try again.'),
+      )
+    } finally {
+      setIsDeciding(false)
+    }
   }
 
   return (
@@ -704,6 +822,10 @@ export default function HRConsole({ baseUrl = '' }) {
           className={`mt-24 border-t ${ruleClass} pt-24`}
           onJobPostChange={(event) => setJobPostId(event.target.value)}
           onSubmit={handleRewriteSubmit}
+          decision={decision}
+          decisionError={decisionError}
+          isDeciding={isDeciding}
+          onDecide={handleDecide}
         />
       </div>
     </div>

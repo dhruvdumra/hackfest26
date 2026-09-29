@@ -8,9 +8,14 @@ import {
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import HRConsole from './HRConsole.jsx'
-import { getDisplacementRadar, rewriteEmployerFilter } from '../api.js'
+import {
+  decideEmployerRewrite,
+  getDisplacementRadar,
+  rewriteEmployerFilter,
+} from '../api.js'
 
 vi.mock('../api.js', () => ({
+  decideEmployerRewrite: vi.fn(),
   getDisplacementRadar: vi.fn(),
   rewriteEmployerFilter: vi.fn(),
 }))
@@ -65,6 +70,86 @@ function deferred() {
 
 const radarMock = vi.mocked(getDisplacementRadar)
 const rewriteMock = vi.mocked(rewriteEmployerFilter)
+const decisionMock = vi.mocked(decideEmployerRewrite)
+
+describe('HRConsole hiring-manager sign-off', () => {
+  beforeEach(() => {
+    radarMock.mockReset()
+    rewriteMock.mockReset()
+    decisionMock.mockReset()
+    radarMock.mockResolvedValue(RADAR_ROW)
+    rewriteMock.mockResolvedValue(REWRITE_ROW)
+  })
+
+  it('asks the hiring manager to approve or reject the rewrite', async () => {
+    render(<HRConsole />)
+
+    await screen.findByTestId('hidden-talent-count')
+
+    expect(screen.getByRole('button', { name: 'Approve and publish' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled()
+  })
+
+  it('publishes the rewrite on approval', async () => {
+    decisionMock.mockResolvedValue({
+      job_post_id: 'post-chennai-qa-analyst-118',
+      decision: 'approved',
+      message: 'Published by hiring manager',
+      decided_at: '2026-09-30T05:00:00+00:00',
+    })
+    render(<HRConsole baseUrl="http://api" />)
+    await screen.findByTestId('hidden-talent-count')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and publish' }))
+
+    expect(await screen.findByTestId('rewrite-decision')).toHaveTextContent(
+      'Published by hiring manager',
+    )
+    expect(decisionMock).toHaveBeenCalledWith('post-chennai-qa-analyst-118', true, {
+      baseUrl: 'http://api',
+    })
+    expect(screen.queryByRole('button', { name: 'Approve and publish' })).toBeNull()
+  })
+
+  it('records a rejection', async () => {
+    decisionMock.mockResolvedValue({
+      job_post_id: 'post-chennai-qa-analyst-118',
+      decision: 'rejected',
+      message: 'Rejected by hiring manager · the rewrite is not published',
+      decided_at: '2026-09-30T05:00:00+00:00',
+    })
+    render(<HRConsole />)
+    await screen.findByTestId('hidden-talent-count')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+
+    expect(await screen.findByTestId('rewrite-decision')).toHaveTextContent(
+      'Rejected by hiring manager',
+    )
+    expect(decisionMock).toHaveBeenCalledWith('post-chennai-qa-analyst-118', false, {
+      baseUrl: '',
+    })
+  })
+
+  it('keeps the buttons when the decision could not be recorded', async () => {
+    decisionMock.mockRejectedValue(new Error('network down'))
+    render(<HRConsole />)
+    await screen.findByTestId('hidden-talent-count')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and publish' }))
+
+    expect(await screen.findByTestId('rewrite-decision-error')).toHaveTextContent('network down')
+    expect(screen.getByRole('button', { name: 'Approve and publish' })).toBeEnabled()
+  })
+
+  it('does not ask for sign-off when the post hid nobody', async () => {
+    rewriteMock.mockResolvedValue({ ...REWRITE_ROW, hidden_talent_count: 0 })
+    render(<HRConsole />)
+    await screen.findByTestId('hidden-talent-count')
+
+    expect(screen.queryByRole('button', { name: 'Approve and publish' })).toBeNull()
+  })
+})
 
 describe('HRConsole', () => {
   beforeEach(() => {

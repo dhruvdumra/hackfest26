@@ -301,6 +301,18 @@ export function getDisplacementRadar(radarOptions, options) {
   )
 }
 
+export function decideEmployerRewrite(jobPostId, approved, options) {
+  const { baseUrl, signal } = options ?? {}
+  const postId = encodeURIComponent(String(jobPostId ?? ''))
+
+  return requestJson(`/employer/rewrite-filter/${postId}/decision`, {
+    method: 'POST',
+    body: { approved: approved === true },
+    baseUrl,
+    signal,
+  })
+}
+
 export function rewriteEmployerFilter(jobPostId, options) {
   const { baseUrl, signal } = options ?? {}
 
