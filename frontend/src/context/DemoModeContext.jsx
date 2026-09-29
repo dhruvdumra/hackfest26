@@ -3,7 +3,10 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 import { resolveApiBaseUrl } from '../api.js'
 
 export const DEMO_MODE_STORAGE_KEY = 'reroute:demo-mode'
-export const DEMO_MODE_DEFAULT = true
+// On unless a build says otherwise: the BTP build sets VITE_DEMO_MODE_DEFAULT=false
+// so a fresh browser on the hosted page talks to the hosted backend, not to
+// 127.0.0.1. A viewer's own toggle, kept in localStorage, still wins.
+export const DEMO_MODE_DEFAULT = import.meta.env.VITE_DEMO_MODE_DEFAULT !== 'false'
 
 const DETACHED_DEMO_MODE = {
   demoMode: DEMO_MODE_DEFAULT,

@@ -1,0 +1,34 @@
+# SAP BTP Cloud Foundry manifest for the ReRoute backend. Push from backend/:
+#
+#   cf push
+#
+# No secrets here, ever: HANA_*, GEMINI_API_KEY and CORS_ORIGINS are set once
+# with `cf set-env reroute-backend NAME value` and then `cf restage`. Values set
+# that way survive later pushes; a value written under `env:` below would
+# overwrite them on every push, which is why CORS_ORIGINS is not listed here.
+# See docs/BTP_DEPLOY.md for the whole walkthrough.
+applications:
+  - name: reroute-backend
+    memory: 512M
+    disk_quota: 1G
+    # One instance on purpose: the orchestration run, the WebSocket registry,
+    # the consent wait and the hiring-manager decisions are in-process state.
+    instances: 1
+    # The trial domain is shared by every BTP trial user, so a fixed host name
+    # can already be taken. Read the one you get with `cf app reroute-backend`.
+    random-route: true
+    buildpacks:
+      - python_buildpack
+    command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    health-check-type: http
+    health-check-http-endpoint: /health
+    timeout: 180
+    env:
+      USE_MOCK_HANA: "false"
+      USE_MOCK_GENAI: "false"
+      GENAI_PROVIDER: gemini
+      GHOST_TWIN_THRESHOLD: "5"
+      CONSENT_TIMEOUT_SECONDS: "600"
+      # SQLite on Cloud Foundry is ephemeral: sessions reset on every restart,
+      # which is fine for a demo and is said out loud in the README.
+      DATABASE_PATH: data/reroute.db
