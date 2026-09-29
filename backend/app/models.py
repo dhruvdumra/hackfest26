@@ -326,9 +326,14 @@ class IntegrationModeStatus(APIModel):
     mode: Literal["mock", "live"]
     source: DataSource
     integration_status: IntegrationStatus = "not_implemented"
+    # Which service answers a live call, when it is not the documented
+    # default: the GenAI gateway ("gemini", "openrouter", ...) so a model
+    # answer is never read as SAP AI Core, or "sap_datasphere" for the market.
+    provider: str | None = None
 
 
 class HealthResponse(APIModel):
     status: Literal["ok"]
     hana: IntegrationModeStatus
     genai: IntegrationModeStatus
+    market: IntegrationModeStatus

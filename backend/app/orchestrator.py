@@ -56,7 +56,7 @@ from app.domain.ghost_twin import GhostTwinOutcome, run_ghost_twin_audit
 from app.domain.passport import merge_skill_passport
 from app.mocks.employer_fixtures import employer_readiness_brief
 from app.mocks.hana_fixtures import SKILL_NODES
-from app.mocks.market_fixtures import DEFAULT_CITY, market_brief
+from app.mocks.market_fixtures import DEFAULT_CITY
 from app.models import (
     AgentEvent,
     AgentName,
@@ -75,7 +75,13 @@ from app.models import (
     SkillExtractionResponse,
     SkillPassport,
 )
-from app.services import employer_rewrite, genai_hub, inclusive_matching, learning_pathway
+from app.services import (
+    datasphere,
+    employer_rewrite,
+    genai_hub,
+    inclusive_matching,
+    learning_pathway,
+)
 from app.services.consent import (
     CONSENT_STATE_KEY,
     ConsentDecision,
@@ -375,17 +381,22 @@ async def _market_intelligence(state: OrchestrationState) -> OrchestrationState:
             data={"phase": "market_intelligence", "city": city},
             source="simulated",
         )
-        brief = market_brief(city)
+        brief = await datasphere.market_brief_async(city, state["settings"])
+        live = brief.get("source") == "live"
+        rows = "radar rows from SAP Datasphere" if live else "simulated radar rows"
         await _update_session(store, session_id, state_entry=("market_intelligence", brief))
         await emitter.emit(
             agent="MARKET INTELLIGENCE",
             status="done",
             message=(
-                f"{brief['entry_count']} simulated radar rows"
-                f" · {brief['openings']} openings in {brief['city']}"
+                f"{brief['entry_count']} {rows} · {brief['openings']} openings in {brief['city']}"
             ),
-            data={"phase": "market_intelligence", "source": "simulated", "brief": brief},
-            source="simulated",
+            data={
+                "phase": "market_intelligence",
+                "source": "live" if live else "simulated",
+                "brief": brief,
+            },
+            source="live" if live else "simulated",
         )
         return {**state, "market": brief}
     except Exception as error:

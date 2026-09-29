@@ -73,6 +73,17 @@ class Settings(BaseSettings):
     # is considered stale, so a token cannot expire mid-request. Blank or unset
     # -> 30.0. Must be >= 0.
     genai_hub_token_expiry_margin_seconds: float = Field(default=30.0, ge=0)
+    # Market Intelligence reads its radar from an SAP Datasphere view exposed
+    # for consumption, through a Datasphere database user (space schema + view).
+    # USE_MOCK_MARKET=true, or any blank value below, keeps the bundled fixture.
+    use_mock_market: bool = True
+    datasphere_host: str = ""
+    datasphere_port: int = Field(default=443, ge=1, le=65535)
+    datasphere_user: str = ""
+    datasphere_password: SecretStr = SecretStr("")
+    datasphere_schema: str = ""
+    datasphere_view: str = ""
+    datasphere_timeout_seconds: float = Field(default=8.0, gt=0)
     hana_host: str = ""
     hana_port: int = Field(default=443, ge=1, le=65535)
     hana_user: str = ""
@@ -94,6 +105,19 @@ def session_source(settings: Settings) -> SessionSource:
     if settings.use_mock_hana or settings.use_mock_genai:
         return "simulated"
     return "local"
+
+
+def datasphere_is_configured(settings: Settings) -> bool:
+    return all(
+        value.strip()
+        for value in (
+            settings.datasphere_host,
+            settings.datasphere_user,
+            settings.datasphere_password.get_secret_value(),
+            settings.datasphere_schema,
+            settings.datasphere_view,
+        )
+    )
 
 
 def hana_is_configured(settings: Settings) -> bool:
