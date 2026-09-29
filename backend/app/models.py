@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool, model_validator
 
 InputType = Literal["voice", "text"]
 SessionStatus = Literal["started", "running", "waiting", "completed", "failed"]
@@ -157,6 +157,16 @@ class SessionStartResponse(APIModel):
     session_id: str
     source: SessionSource
     status: Literal["started"] = "started"
+
+
+class ConsentRequest(APIModel):
+    accepted: StrictBool
+
+
+class ConsentResponse(APIModel):
+    session_id: str
+    consent: Literal["accepted", "declined"]
+    decided_at: str
 
 
 class RouteRequest(APIModel):

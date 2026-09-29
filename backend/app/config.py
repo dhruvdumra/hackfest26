@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     hana_password: SecretStr = SecretStr("")
     hana_keep_alive_seconds: float = Field(default=600.0, gt=0)
     hana_query_timeout_seconds: float = Field(default=8.0, gt=0)
+    # How long the Two-Key step waits for Kavya's yes or no before it closes the
+    # run with nothing shared. Long on purpose: in the demo the consent click
+    # comes minutes after the pipeline finishes. Must be > 0.
+    consent_timeout_seconds: float = Field(default=600.0, gt=0)
 
 
 @lru_cache

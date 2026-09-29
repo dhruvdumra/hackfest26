@@ -76,6 +76,12 @@ from app.models import (
     SkillPassport,
 )
 from app.services import employer_rewrite, genai_hub, inclusive_matching, learning_pathway
+from app.services.consent import (
+    CONSENT_STATE_KEY,
+    ConsentDecision,
+    await_consent,
+    pending_consent,
+)
 from app.storage.session_store import (
     SessionNotFoundError,
     SessionStore,
@@ -116,6 +122,12 @@ DEFAULT_TARGET_ROLE: Final[str] = "qa-analyst"
 DEFAULT_HOURS_PER_WEEK: Final[int] = 10
 FALLBACK_START_SKILL: Final[str] = "Manual testing"
 DEFAULT_SKILL_SCORE: Final[int] = 85
+TWO_KEYS: Final[tuple[str, ...]] = ("evidence_disclosure", "plan_acceptance")
+CONSENT_OUTCOME_MESSAGES: Final[dict[ConsentDecision, str]] = {
+    "accepted": "Kavya said yes · her Skill Passport is shared with employers",
+    "declined": "Kavya said no · her Skill Passport stays private",
+    "timed_out": "No answer from Kavya · nothing was shared",
+}
 
 _json_value_adapter: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
@@ -209,10 +221,8 @@ async def run_orchestration(
 
     The session must already exist in ``store``; a missing session is the one
     case that fails the run, and it does so with a terminal event rather than an
-    exception. The session is left ``completed`` when the terminal node runs,
-    which is the documented demo behaviour: ``two_key_wait`` emits
-    ``waiting_consent`` and then the final ``done`` event instead of parking the
-    session in a non-terminal ``waiting`` state.
+    exception. ``two_key_wait`` parks the session in ``waiting`` until Kavya
+    answers (or ``consent_timeout_seconds`` passes), then leaves it ``completed``.
     """
     emitter = EventEmitter(session_id=session.session_id, store=store, on_event=on_event)
     await emitter.hydrate()
@@ -741,57 +751,55 @@ async def _bias_audit(state: OrchestrationState) -> OrchestrationState:
 
 
 async def _two_key_wait(state: OrchestrationState) -> OrchestrationState:
-    """The human sign-off step, and the terminal node of the demo run.
+    """The human sign-off step, and the terminal node of the run.
 
-    The PRD pauses here for a human decision. This build emits the
-    ``waiting_consent`` event and then immediately emits the terminal ``done``
-    event and sets ``status="completed"``, so the demo always ends instead of
-    hanging on a prompt. A real consent round trip belongs in front of this node
-    and would branch out of the graph here.
+    The session parks in ``waiting`` until Kavya answers through
+    ``POST /session/{id}/consent``. Nothing is shared without her yes: if no
+    answer arrives within ``consent_timeout_seconds`` the run closes as
+    ``timed_out`` with nothing shared, so a demo can never hang here.
     """
     emitter = state["emitter"]
     settings = state["settings"]
     store = state["store"]
     session_id = state["session_id"]
     source = session_source(settings)
+    timeout_seconds = settings.consent_timeout_seconds
     try:
-        await emitter.emit(
-            agent="ORCHESTRATOR",
-            status="waiting_consent",
-            message="Confirm the two keys: evidence disclosure and the re-routed plan",
-            data={
-                "phase": "two_key_wait",
-                "keys": ["evidence_disclosure", "plan_acceptance"],
-                "blocking": False,
-            },
-            source=source,
-        )
         await _update_session(
             store,
             session_id,
-            fields={"status": "completed"},
-            state_entry=(
-                "consent",
-                {
-                    "phase": "two_key_wait",
-                    "keys": ["evidence_disclosure", "plan_acceptance"],
-                    "state": "auto_accepted_for_demo",
-                    "blocking": False,
-                },
-            ),
+            fields={"status": "waiting"},
+            state_entry=(CONSENT_STATE_KEY, pending_consent(TWO_KEYS, timeout_seconds)),
         )
         await emitter.emit(
             agent="ORCHESTRATOR",
-            status="done",
-            message="Demo sign-off recorded · the re-routed plan is ready for review",
+            status="waiting_consent",
+            message="Waiting for Kavya: share her Skill Passport with employers?",
             data={
                 "phase": "two_key_wait",
-                "keys": ["evidence_disclosure", "plan_acceptance"],
+                "keys": list(TWO_KEYS),
+                "blocking": True,
+                "timeout_seconds": timeout_seconds,
+            },
+            source=source,
+        )
+        decision = await await_consent(store, session_id, timeout_seconds)
+        # The closing event lands before the status flips, so a client that sees
+        # ``completed`` always finds the outcome in the event history.
+        await emitter.emit(
+            agent="ORCHESTRATOR",
+            status="done",
+            message=CONSENT_OUTCOME_MESSAGES[decision],
+            data={
+                "phase": "two_key_wait",
+                "keys": list(TWO_KEYS),
+                "consent": decision,
                 "terminal": True,
                 "session_status": "completed",
             },
             source=source,
         )
+        await _update_session(store, session_id, fields={"status": "completed"})
     except Exception as error:
         return await _record_failure(state, "ORCHESTRATOR", error)
     return state

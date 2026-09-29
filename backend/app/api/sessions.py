@@ -4,7 +4,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 from uuid import uuid4
 
 from fastapi import (
@@ -22,7 +22,14 @@ from starlette.requests import HTTPConnection
 
 from app.api.dependencies import SessionStoreDependency, SettingsDependency
 from app.config import Settings, session_source
-from app.models import AgentEvent, SessionStartRequest, SessionStartResponse, SessionState
+from app.models import (
+    AgentEvent,
+    ConsentRequest,
+    ConsentResponse,
+    SessionStartRequest,
+    SessionStartResponse,
+    SessionState,
+)
 from app.realtime import (
     LAST_EVENT_ID_HEADER,
     LAST_EVENT_ID_QUERY_PARAM,
@@ -30,7 +37,8 @@ from app.realtime import (
     RealtimeRegistryDependency,
     parse_last_event_id,
 )
-from app.storage.session_store import SessionStore
+from app.services.consent import ConsentNotPendingError, decide_consent
+from app.storage.session_store import SessionNotFoundError, SessionStore
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +186,37 @@ async def get_session(
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     return session
+
+
+@router.post(
+    "/{session_id}/consent",
+    response_model=ConsentResponse,
+    responses={
+        404: {"description": "Session not found"},
+        409: {"description": "The session is not waiting for consent"},
+    },
+)
+async def record_consent(
+    session_id: str,
+    request: ConsentRequest,
+    session_store: SessionStoreDependency,
+) -> ConsentResponse:
+    """Kavya's answer to the Two-Key step; the waiting run picks it up and finishes."""
+    decision: Literal["accepted", "declined"] = "accepted" if request.accepted else "declined"
+    try:
+        record = await decide_consent(session_store, session_id, decision)
+    except SessionNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        ) from error
+    except ConsentNotPendingError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This session is not waiting for consent.",
+        ) from error
+    return ConsentResponse(
+        session_id=session_id, consent=decision, decided_at=str(record["decided_at"])
+    )
 
 
 async def _orchestrate_session(
