@@ -11,12 +11,14 @@ import HRConsole from './HRConsole.jsx'
 import {
   decideEmployerRewrite,
   getDisplacementRadar,
+  getEmployerDecision,
   rewriteEmployerFilter,
 } from '../api.js'
 
 vi.mock('../api.js', () => ({
   decideEmployerRewrite: vi.fn(),
   getDisplacementRadar: vi.fn(),
+  getEmployerDecision: vi.fn(),
   rewriteEmployerFilter: vi.fn(),
 }))
 
@@ -71,14 +73,44 @@ function deferred() {
 const radarMock = vi.mocked(getDisplacementRadar)
 const rewriteMock = vi.mocked(rewriteEmployerFilter)
 const decisionMock = vi.mocked(decideEmployerRewrite)
+const latestDecisionMock = vi.mocked(getEmployerDecision)
 
 describe('HRConsole hiring-manager sign-off', () => {
   beforeEach(() => {
     radarMock.mockReset()
     rewriteMock.mockReset()
     decisionMock.mockReset()
+    latestDecisionMock.mockReset()
     radarMock.mockResolvedValue(RADAR_ROW)
     rewriteMock.mockResolvedValue(REWRITE_ROW)
+    latestDecisionMock.mockRejectedValue(Object.assign(new Error('none yet'), { status: 404 }))
+  })
+
+  it('shows a decision already made elsewhere, such as SAP Build Apps', async () => {
+    latestDecisionMock.mockResolvedValue({
+      job_post_id: 'post-chennai-qa-analyst-118',
+      decision: 'approved',
+      message: 'Published by hiring manager',
+      decided_at: '2026-09-30T05:00:00+00:00',
+    })
+    render(<HRConsole baseUrl="http://api" />)
+
+    expect(await screen.findByTestId('rewrite-decision')).toHaveTextContent(
+      'Published by hiring manager',
+    )
+    expect(latestDecisionMock).toHaveBeenCalledWith('post-chennai-qa-analyst-118', {
+      baseUrl: 'http://api',
+      signal: expect.any(AbortSignal),
+    })
+  })
+
+  it('still asks for sign-off when there is no decision yet', async () => {
+    render(<HRConsole />)
+    await screen.findByTestId('hidden-talent-count')
+
+    await waitFor(() => expect(latestDecisionMock).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: 'Approve and publish' })).toBeEnabled()
+    expect(screen.queryByTestId('rewrite-decision-error')).toBeNull()
   })
 
   it('asks the hiring manager to approve or reject the rewrite', async () => {

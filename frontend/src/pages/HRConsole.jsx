@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   decideEmployerRewrite,
   getDisplacementRadar,
+  getEmployerDecision,
   rewriteEmployerFilter,
 } from '../api.js'
 import {
@@ -735,6 +736,7 @@ export default function HRConsole({ baseUrl = '' }) {
 
       if (rewriteRequestRef.current === controller) {
         setRewrite(response)
+        void loadDecision(asText(response?.job_post_id, nextJobPostId), controller)
       }
     } catch (requestError) {
       if (rewriteRequestRef.current === controller) {
@@ -744,6 +746,27 @@ export default function HRConsole({ baseUrl = '' }) {
       if (rewriteRequestRef.current === controller) {
         setIsRewriteLoading(false)
       }
+    }
+  }
+
+  // A decision may already exist, made here earlier or in the SAP Build Apps
+  // approval screen, so it is read back with the post. No decision yet (404)
+  // or a failed read just leaves the buttons up.
+  async function loadDecision(postId, controller) {
+    try {
+      const latest = await getEmployerDecision(postId, {
+        baseUrl,
+        signal: controller.signal,
+      })
+
+      if (
+        rewriteRequestRef.current === controller &&
+        typeof latest?.decision === 'string'
+      ) {
+        setDecision(latest)
+      }
+    } catch {
+      // Nothing recorded yet, or not readable: the sign-off buttons stay.
     }
   }
 
