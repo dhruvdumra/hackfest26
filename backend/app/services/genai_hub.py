@@ -14,7 +14,10 @@ if TYPE_CHECKING:
     # typing — the value itself is always the public httpx.USE_CLIENT_DEFAULT.
     from httpx._client import UseClientDefault
 
-from app.config import Settings, resolve_genai_provider
+from app.config import (
+    Settings,
+    resolve_genai_provider,
+)
 from app.mocks.genai_fixtures import (
     CREDENTIAL_THRESHOLD,
     NEEDS_PROOF_TERMS,
@@ -196,10 +199,12 @@ def post_orchestration(payload: dict[str, Any], settings: Settings) -> Any:
 
     Provider selection is ``app.config.resolve_genai_provider``. The SAP
     Generative AI Hub is the default and the intended production path; Gemini
-    is the fallback for environments where no AI Core key is obtainable (a
-    BTP trial account does not carry SAP AI Core). Both return the same
+    and any OpenAI-compatible gateway (OpenCode Zen, OpenRouter, NVIDIA NIM)
+    are the fallbacks for environments where no AI Core key is obtainable — a
+    BTP trial account does not carry SAP AI Core. All three return the same
     OpenAI-style envelope, so everything above this function is
-    provider-agnostic.
+    provider-agnostic. ``describe_genai_provider`` names the concrete gateway
+    for logs and the preflight; no log claims SAP answered when it did not.
 
     SAP authentication is the two-step AI Core flow when
     ``GENAI_HUB_AUTH_URL`` is set: mint a bearer token with
@@ -216,7 +221,34 @@ def post_orchestration(payload: dict[str, Any], settings: Settings) -> Any:
         from app.services import gemini_client
 
         return gemini_client.post_generate_content(payload, settings)
+    if resolve_genai_provider(settings) == "compatible":
+        return _post_to_compatible(payload, settings)
     return _post_to_sap(payload, settings)
+
+
+def _post_to_compatible(payload: dict[str, Any], settings: Settings) -> Any:
+    """Any OpenAI-compatible gateway: OpenCode Zen, OpenRouter, NVIDIA NIM.
+
+    All three speak POST /chat/completions with a bearer key, so this is one
+    code path rather than three integrations. The response is already in the
+    shape the parsers above expect; it is only normalised into the same
+    envelope the SAP path returns, so nothing above this function can tell
+    which gateway answered and therefore no answer is mistaken for an SAP one.
+    """
+    from app.services import openai_compatible
+
+    document = openai_compatible.post_chat_completions(payload, settings)
+    text = openai_compatible.extract_message_text(document)
+    return _envelope_with(text)
+
+
+def _envelope_with(text: str) -> dict[str, Any]:
+    """Wrap model text in the envelope the shared parsers look for."""
+    return {
+        "results": [
+            {"output": {"choices": [{"message": {"content": text}}]}},
+        ]
+    }
 
 
 def _post_to_sap(payload: dict[str, Any], settings: Settings) -> Any:

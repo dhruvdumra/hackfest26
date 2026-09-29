@@ -24,7 +24,11 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.config import Settings, genai_is_configured, resolve_genai_provider  # noqa: E402
+from app.config import (  # noqa: E402
+    Settings,
+    describe_genai_provider,
+    genai_is_configured,
+)
 from app.models import MatchConstraints  # noqa: E402
 from app.services import genai_hub, hana_client, inclusive_matching, learning_pathway  # noqa: E402
 
@@ -120,7 +124,7 @@ def check_genai(settings: Settings) -> None:
             "disabled (USE_MOCK_GENAI=true) -> simulated scorer serves every request",
         )
         return
-    provider = resolve_genai_provider(settings)
+    provider = describe_genai_provider(settings)
     if not genai_is_configured(settings):
         record(
             f"LLM ({provider})",

@@ -28,9 +28,10 @@ class Settings(BaseSettings):
     genai_hub_model: str = ""
     genai_hub_timeout_seconds: float = Field(default=8.0, gt=0)
     # Which live provider the LLM calls go to. "auto" resolves to Gemini when
-    # GEMINI_API_KEY is set and the SAP Hub otherwise, so a laptop with one
-    # provider configured and the other not just works.
-    genai_provider: Literal["auto", "sap", "gemini"] = "auto"
+    # GEMINI_API_KEY is set, then to the OpenAI-compatible gateway, then to the
+    # SAP Hub — so a laptop with one provider configured and the others not just
+    # works, in the order that is cheapest to obtain.
+    genai_provider: Literal["auto", "sap", "gemini", "compatible"] = "auto"
     # Google AI Studio key, from aistudio.google.com -> Get API key. The free
     # tier needs no billing account. Held as a SecretStr and never logged.
     gemini_api_key: SecretStr = SecretStr("")
@@ -41,6 +42,23 @@ class Settings(BaseSettings):
     # Generative Language API v1beta base. Overridable for regional endpoints
     # and for tests; the path is the model, not a deployment.
     gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta"
+    # ── OpenAI-compatible gateway ─────────────────────────────────────────
+    # OpenCode Zen, OpenRouter and NVIDIA NIM all speak the same wire format:
+    # POST {LLM_BASE_URL}/chat/completions with `Authorization: Bearer <key>`
+    # and a {model, messages} body. One client therefore covers all three, and
+    # the only thing that differs between them is this pair of values.
+    #
+    #   OpenCode Zen  https://opencode.ai/zen/v1    (free models, e.g. space-bunny-free)
+    #   OpenRouter    https://openrouter.ai/api/v1  (free variants need a ":free" suffix)
+    #   NVIDIA NIM    https://integrate.api.nvidia.com/v1
+    #
+    # Blank base URL -> the provider is treated as unconfigured rather than
+    # raising, so a laptop without a key serves the labelled fixture.
+    llm_base_url: str = ""
+    llm_api_key: SecretStr = SecretStr("")
+    # The bare model id as the gateway spells it. OpenRouter's free tier needs
+    # the ":free" suffix, e.g. meta-llama/llama-3.3-70b-instruct:free.
+    llm_model: str = ""
     # Token endpoint for the client-credentials exchange. The SAP trial
     # onboarding email calls it the "Token URL" and gives it as a bare XSUAA
     # host, e.g. https://<tenant>.authentication.<region>.hana.ondemand.com.
@@ -96,6 +114,17 @@ def genai_is_configured(settings: Settings) -> bool:
     match resolve_genai_provider(settings):
         case "gemini":
             return bool(settings.gemini_api_key.get_secret_value().strip())
+        case "compatible":
+            # Both halves, not just the key: a base URL with no key would 401,
+            # and a key with no base URL has nowhere to be sent.
+            return all(
+                value.strip()
+                for value in (
+                    settings.llm_base_url,
+                    settings.llm_api_key.get_secret_value(),
+                    settings.llm_model,
+                )
+            )
         case "sap":
             return all(
                 value.strip()
@@ -108,18 +137,46 @@ def genai_is_configured(settings: Settings) -> bool:
             )
 
 
-def resolve_genai_provider(settings: Settings) -> Literal["gemini", "sap"]:
+def resolve_genai_provider(settings: Settings) -> Literal["gemini", "compatible", "sap"]:
     """Decide which provider this process talks to.
 
-    "auto" prefers Gemini when a key is present, because it is the one a laptop
-    can actually get in under a minute, and falls back to the SAP Hub. An
-    explicit "sap" or "gemini" is honoured even when that provider is not
-    configured, so a misconfigured explicit choice produces the honest
-    "missing configuration" error instead of silently using a different
-    provider than the operator asked for.
+    "auto" takes the first provider that is actually configured, in the order
+    cheapest to obtain: Gemini (an AI Studio key, about a minute), then an
+    OpenAI-compatible gateway (Zen, OpenRouter, NVIDIA NIM — a key each), then
+    the SAP Hub. An explicit "sap", "gemini" or "compatible" is honoured even
+    when that provider is not configured, so a misconfigured explicit choice
+    produces the honest "missing configuration" error instead of silently using
+    a different provider than the operator asked for.
     """
-    if settings.genai_provider in {"sap", "gemini"}:
-        return cast('Literal["sap", "gemini"]', settings.genai_provider)
+    if settings.genai_provider in {"sap", "gemini", "compatible"}:
+        return cast('Literal["sap", "gemini", "compatible"]', settings.genai_provider)
     if settings.gemini_api_key.get_secret_value().strip():
         return "gemini"
+    if all(
+        value.strip()
+        for value in (settings.llm_base_url, settings.llm_api_key.get_secret_value())
+    ):
+        return "compatible"
     return "sap"
+
+
+def describe_genai_provider(settings: Settings) -> str:
+    """A human label for the selected provider, for logs and the preflight.
+
+    Names the concrete gateway when the OpenAI-compatible path is chosen,
+    because "compatible" alone would not tell an operator on stage which of
+    three services they are actually talking to.
+    """
+    provider = resolve_genai_provider(settings)
+    if provider != "compatible":
+        return provider
+    host = settings.llm_base_url.split("//")[-1].split("/")[0]
+    match host:
+        case "opencode.ai":
+            return "opencode-zen"
+        case "openrouter.ai":
+            return "openrouter"
+        case host if "nvidia.com" in host:
+            return "nvidia-nim"
+        case _:
+            return f"compatible:{host}"
