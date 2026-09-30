@@ -20,7 +20,9 @@ import Select from '../components/Select.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import TextInput from '../components/TextInput.jsx'
 
-const DEFAULT_FROM_SKILL = 'Manual testing'
+// The pipeline starts Kavya's route from the proven skill with the shortest
+// bridge, API testing, so the planner opens on that same question.
+const DEFAULT_FROM_SKILL = 'API testing'
 const DEFAULT_TARGET_ROLE = 'qa-analyst'
 const DEFAULT_HOURS_PER_WEEK = 10
 // Must mirror the API's RouteRequest bounds, or the panel submits values the

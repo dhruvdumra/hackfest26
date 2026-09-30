@@ -225,6 +225,13 @@ describe('RouteMap', () => {
     await waitFor(() => expect(section).toHaveAttribute('aria-busy', 'false'))
   })
 
+  it('opens on API testing, the proven skill the pipeline starts her route from', () => {
+    render(<RouteMap />)
+
+    expect(screen.getByLabelText('From skill')).toHaveValue('API testing')
+    expect(screen.getByLabelText('Target role')).toHaveValue('qa-analyst')
+  })
+
   it('renders an empty state with a call to action before any route is requested', () => {
     renderMap()
 
