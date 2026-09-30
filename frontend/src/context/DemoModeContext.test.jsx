@@ -95,8 +95,9 @@ describe('DemoModeContext', () => {
       result.current.toggleDemoMode()
     })
 
+    // Demo mode replays the console only; the panels keep the configured backend.
     expect(result.current.demoMode).toBe(true)
-    expect(result.current.backendBaseUrl).toBe('http://127.0.0.1:8000')
+    expect(result.current.backendBaseUrl).toBe('http://192.168.0.5:8000')
 
     act(() => {
       result.current.toggleDemoMode()

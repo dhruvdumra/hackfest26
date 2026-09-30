@@ -27,14 +27,19 @@ export function getApiBaseUrlSafe(baseUrl) {
   }
 }
 
+// Demo mode swaps the agent console for a recording; every panel keeps calling
+// the backend this build was pointed at. Only a build with no backend
+// configured falls back to one running on this laptop, so switching demo mode
+// on the hosted site can never send the panels to 127.0.0.1.
 export function resolveApiBaseUrl(options) {
   const { baseUrl, demoMode = false } = options ?? {}
+  const configuredBaseUrl = getApiBaseUrlSafe(baseUrl)
 
-  if (demoMode) {
+  if (demoMode && configuredBaseUrl === '') {
     return DEFAULT_BACKEND_BASE_URL
   }
 
-  return getApiBaseUrlSafe(baseUrl)
+  return configuredBaseUrl
 }
 
 export class ApiError extends Error {
