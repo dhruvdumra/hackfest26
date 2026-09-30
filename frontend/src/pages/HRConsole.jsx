@@ -65,8 +65,13 @@ function formatDecisionTime(decidedAt) {
  * The human gate on the employer side: nothing ReRoute rewrites is published
  * until a hiring manager signs it off. The decision is recorded by the backend
  * (`source=local`), not by an ATS.
+ *
+ * A decision read back from an earlier visit (a rehearsal, or the SAP Build
+ * Apps screen) is shown as one line above the buttons rather than replacing
+ * them, so the manager can always decide again; the backend keeps every
+ * decision and answers with the latest.
  */
-function SignOffBlock({ decision, error, isDeciding, onDecide }) {
+function SignOffBlock({ decision, priorDecision, error, isDeciding, onDecide, onDecideAgain }) {
   return (
     <div className={`mt-12 border-t ${ruleClass} pt-8`}>
       <h3 className={sectionHeadingClass}>Hiring manager sign-off</h3>
@@ -90,9 +95,23 @@ function SignOffBlock({ decision, error, isDeciding, onDecide }) {
               </>
             )}
           </div>
+          <Button type="button" variant="ghost" className="mt-6" onClick={onDecideAgain}>
+            Decide again
+          </Button>
         </>
       ) : (
         <>
+          {priorDecision ? (
+            <div className={`mt-3 ${metaRowClass}`} data-testid="rewrite-prior-decision">
+              <span>{`Last recorded decision=${asText(priorDecision.decision, 'recorded')}`}</span>
+              {formatDecisionTime(priorDecision.decided_at) === '' ? null : (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{formatDecisionTime(priorDecision.decided_at)}</span>
+                </>
+              )}
+            </div>
+          ) : null}
           <p className={`mt-3 ${bodyCopyClass}`}>
             Nothing is published until a person signs it off. Approve to publish
             the rewritten post, or reject it and the rewrite stays unpublished.
@@ -141,9 +160,11 @@ function RewriteBlock({
   onJobPostChange,
   onSubmit,
   decision,
+  priorDecision,
   decisionError,
   isDeciding,
   onDecide,
+  onDecideAgain,
 }) {
   const hiddenTalentCount = rewrite ? asCount(rewrite.hidden_talent_count) : null
   const removedCriteria = rewrite ? asList(rewrite.removed_criteria) : []
@@ -323,11 +344,13 @@ function RewriteBlock({
             {noHiddenTalent ? null : (
               <SignOffBlock
                 decision={decision}
+                priorDecision={priorDecision}
                 error={decisionError}
                 isDeciding={isDeciding}
                 onDecide={(approved) =>
                   onDecide(asText(rewrite.job_post_id, jobPostId), approved)
                 }
+                onDecideAgain={onDecideAgain}
               />
             )}
 
@@ -379,7 +402,10 @@ export default function HRConsole({ baseUrl = '' }) {
   const [rewrite, setRewrite] = useState(EMPTY_RESULT)
   const [rewriteError, setRewriteError] = useState('')
   const [isRewriteLoading, setIsRewriteLoading] = useState(true)
+  // `decision` is one made on this page; `priorDecision` is read back from
+  // the backend and only annotates the buttons.
   const [decision, setDecision] = useState(EMPTY_RESULT)
+  const [priorDecision, setPriorDecision] = useState(EMPTY_RESULT)
   const [decisionError, setDecisionError] = useState('')
   const [isDeciding, setIsDeciding] = useState(false)
 
@@ -410,6 +436,7 @@ export default function HRConsole({ baseUrl = '' }) {
     setRewriteError('')
     setRewrite(EMPTY_RESULT)
     setDecision(EMPTY_RESULT)
+    setPriorDecision(EMPTY_RESULT)
     setDecisionError('')
 
     try {
@@ -434,8 +461,8 @@ export default function HRConsole({ baseUrl = '' }) {
   }
 
   // A decision may already exist, made here earlier or in the SAP Build Apps
-  // approval screen, so it is read back with the post. No decision yet (404)
-  // or a failed read just leaves the buttons up.
+  // approval screen, so it is read back with the post and shown beside the
+  // buttons. No decision yet (404) or a failed read shows nothing extra.
   async function loadDecision(postId, controller) {
     try {
       const latest = await getEmployerDecision(postId, {
@@ -447,7 +474,7 @@ export default function HRConsole({ baseUrl = '' }) {
         rewriteRequestRef.current === controller &&
         typeof latest?.decision === 'string'
       ) {
-        setDecision(latest)
+        setPriorDecision(latest)
       }
     } catch {
       // Nothing recorded yet, or not readable: the sign-off buttons stay.
@@ -491,9 +518,14 @@ export default function HRConsole({ baseUrl = '' }) {
           onJobPostChange={(event) => setJobPostId(event.target.value)}
           onSubmit={handleRewriteSubmit}
           decision={decision}
+          priorDecision={priorDecision}
           decisionError={decisionError}
           isDeciding={isDeciding}
           onDecide={handleDecide}
+          onDecideAgain={() => {
+            setPriorDecision(decision)
+            setDecision(EMPTY_RESULT)
+          }}
         />
       </div>
     </div>

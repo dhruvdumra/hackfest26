@@ -37,9 +37,9 @@ const META_CLASS = `${metaClass} ${smokeClass}`
  */
 export default function SessionCard({
   persona = 'Kavya · 29 · Chennai',
-  category = 'Manual tester → QA analyst · 10 weeks',
-  date = '18 Sep 2026',
-  dateTime = '2026-09-18',
+  category = 'Manual tester → QA analyst · 45 hours · 4.5 weeks',
+  date = '30 Sep 2026',
+  dateTime = '2026-09-30',
   className = '',
 }) {
   return (

@@ -69,7 +69,7 @@ describe('HRConsole hiring-manager sign-off', () => {
     latestDecisionMock.mockRejectedValue(Object.assign(new Error('none yet'), { status: 404 }))
   })
 
-  it('shows a decision already made elsewhere, such as SAP Build Apps', async () => {
+  it('shows a decision made earlier, such as in SAP Build Apps, and still asks again', async () => {
     latestDecisionMock.mockResolvedValue({
       job_post_id: 'post-chennai-qa-analyst-118',
       decision: 'approved',
@@ -78,9 +78,12 @@ describe('HRConsole hiring-manager sign-off', () => {
     })
     render(<HRConsole baseUrl="http://api" />)
 
-    expect(await screen.findByTestId('rewrite-decision')).toHaveTextContent(
-      'Published by hiring manager',
+    // The earlier decision annotates the buttons instead of replacing them, so
+    // a rehearsal approval never leaves the live demo with nothing to click.
+    expect(await screen.findByTestId('rewrite-prior-decision')).toHaveTextContent(
+      'Last recorded decision=approved',
     )
+    expect(screen.getByRole('button', { name: 'Approve and publish' })).toBeEnabled()
     expect(latestDecisionMock).toHaveBeenCalledWith('post-chennai-qa-analyst-118', {
       baseUrl: 'http://api',
       signal: expect.any(AbortSignal),
@@ -144,6 +147,25 @@ describe('HRConsole hiring-manager sign-off', () => {
     expect(decisionMock).toHaveBeenCalledWith('post-chennai-qa-analyst-118', false, {
       baseUrl: '',
     })
+  })
+
+  it('lets the hiring manager decide again after a decision', async () => {
+    decisionMock.mockResolvedValue({
+      job_post_id: 'post-chennai-qa-analyst-118',
+      decision: 'approved',
+      message: 'Published by hiring manager',
+      decided_at: '2026-09-30T05:00:00+00:00',
+    })
+    render(<HRConsole />)
+    await screen.findByTestId('hidden-talent-count')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and publish' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Decide again' }))
+
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled()
+    expect(screen.getByTestId('rewrite-prior-decision')).toHaveTextContent(
+      'Last recorded decision=approved',
+    )
   })
 
   it('keeps the buttons when the decision could not be recorded', async () => {

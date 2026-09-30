@@ -262,6 +262,10 @@ export default function App() {
 
   const isBusy = isStreaming || (isStarting && !sessionId)
 
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
   const scrollToAudit = useCallback(() => {
     document.getElementById('audit')?.scrollIntoView({ behavior: 'smooth' })
   }, [])
@@ -440,7 +444,7 @@ export default function App() {
           </Section>
 
           <Reveal>
-            <Manifesto />
+            <Manifesto onCtaClick={scrollToTop} />
           </Reveal>
         </div>
       </main>
