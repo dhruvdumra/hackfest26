@@ -31,8 +31,8 @@ college, Chennai, 18-month caregiving gap, skill score 86), two screening models
 
 Her twin with no career gap scores six points more on the legacy screen, and
 that gap is the problem. Eighteen months out of work is worth six points to a
-legacy ATS, and the audit names it. Flip one field in the UI and re-run; the
-verdict moves.
+legacy ATS, and the audit names it. Pick the Legacy ATS screen in the UI and
+re-run; the verdict moves.
 
 ---
 
@@ -173,15 +173,17 @@ curl http://127.0.0.1:8000/health
 
 1. **Press `RUN PIPELINE`.** The hero is a live agent console, not a video. The
    six agents report in real time (`6/6 agents done`), then the orchestrator
-   **stops and asks Kavya**: *share her Skill Passport with employers?* Nothing
-   is shared until she answers; in demo mode the answer stays on screen and says
-   so.
+   **stops and asks Kavya**: *share her Skill Passport with employers?* Step 2
+   of the nav turns into `CONSENT WAITING`; click it and answer. Nothing is
+   shared until she does, and the session then reads `completed`.
 2. **Score a work sample** for a skill that needs proof; a credential is issued at 70+.
-3. **The route map:** 3 skills, 45 hours, 4.5 weeks at 10 h/week.
-4. **Scroll to Stage 06 · Bias Audit.** You land on `PASS`, every twin delta at
-   `±0`. That is the control. **Flip `SIMULATE LEGACY ATS` and re-run.** Same
-   candidate, same score. The verdict goes amber, `max delta 6 > threshold 5`,
-   and the offending rows light up. *This is the moment the project exists for.*
+3. **The route (nav step 3):** press `BUILD ROUTE` for a live route from HANA
+   Cloud: 3 skills, 45 hours, 4.5 weeks at 10 h/week.
+4. **The Ghost Twin (nav step 4, or `SEE THE BIAS AUDIT`).** It opens on the
+   **Fair screen**. `RUN AUDIT`: a big `0`, `PASS`, she still scores 86. That
+   is the control. **Pick `LEGACY ATS` and run it again.** Same candidate. The
+   verdict turns amber, `+6`, and one sentence names the cause: her 18-month
+   career gap. *This is the moment the project exists for.*
 5. **The HR console:** the rewritten job post and the 12 candidates it had
    hidden. The hiring manager **approves** it, and it is published.
 
@@ -196,11 +198,11 @@ curl http://127.0.0.1:8000/health
 cd backend  && .venv/Scripts/python -m pytest    # 332 passed
              .venv/Scripts/python -m ruff check .
              .venv/Scripts/python -m mypy
-cd frontend && npm test                          # 139 passed
+cd frontend && npm test                          # 149 passed
              npm run lint && npm run typecheck && npm run build
 ```
 
-**471 tests, all passing.** The suites cover the parts that matter to a judge:
+**481 tests, all passing.** The suites cover the parts that matter to a judge:
 the audit's threshold boundary and the exact legacy-screen numbers the deck
 quotes, the guardrail's blocking rule, the consent wait (yes, no, timeout, a
 second answer), orchestrator failures that must not abort a run, WebSocket
@@ -266,8 +268,9 @@ justification cannot drift away from the value it justifies.
 - **SAP AI Core has never run live.** We have no AI Core service key, so the LLM
   answers come from the Gemini API; `/health` says so. HANA Cloud is verified
   live for `/match`. The tests prove the *fallbacks*, not the live responses.
-- The live agent stream needs demo mode off. In demo mode the console plays a
-  recorded run of the real backend, message for message. Rehearse the toggle.
+- The live agent stream needs demo mode off. In demo mode the console replays a
+  recorded run of the real backend, message for message, once you press
+  `RUN PIPELINE`; the other panels still call the backend. Rehearse the toggle.
 - Sessions and hiring-manager decisions do not survive a restart (SQLite and
   process memory; on Cloud Foundry the disk is ephemeral). Run one instance.
 - Role embeddings come from a deterministic hashing embedder, not a model.

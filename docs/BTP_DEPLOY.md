@@ -145,6 +145,7 @@ cf logs reroute-backend --recent
 
 | Symptom | Fix |
 | --- | --- |
+| A URL answers `404 Not Found: Requested route (...) does not exist` | The app is stopped; the trial stops apps overnight. `cf start reroute-backend` (about a minute), then `cf start reroute-frontend` |
 | Push fails on the Python version | Edit `backend/runtime.txt` to `python-3.12.x` and push again |
 | `cf push` crashes with out-of-memory | In `backend/manifest.yml`, set `memory: 768M` |
 | Browser console says **CORS** | The origin it names is missing from `CORS_ORIGINS` (step 6) |
