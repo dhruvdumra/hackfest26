@@ -225,6 +225,52 @@ describe('useSessionStream', () => {
     )
   })
 
+  it('opens one new socket when an error is followed by a close', () => {
+    renderStream()
+    const socket = FakeWebSocket.instances[0]
+
+    act(() => {
+      socket.open()
+      socket.onerror?.({ type: 'error' })
+      socket.remoteClose({ code: 1006, wasClean: false })
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(RECONNECT_MAX_DELAY_MS)
+    })
+
+    expect(socket.closeCalls).toHaveLength(1)
+    expect(FakeWebSocket.instances).toHaveLength(2)
+  })
+
+  it('stops reconnecting once the orchestrator has closed the run', () => {
+    const { result } = renderStream()
+    const socket = FakeWebSocket.instances[0]
+
+    act(() => {
+      socket.open()
+      socket.emit(agentEvent())
+      socket.emit(
+        agentEvent({
+          status: 'done',
+          message: 'Kavya said yes',
+          sequence: 2,
+          event_id: 'demo:event:2',
+          data: { consent: 'accepted' },
+        }),
+      )
+      socket.remoteClose({ code: 1006, wasClean: false })
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(RECONNECT_MAX_DELAY_MS * 4)
+    })
+
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    expect(result.current.status).toBe('closed')
+    expect(result.current.events).toHaveLength(2)
+  })
+
   it('reports a missing session as an error without retrying', () => {
     const { result } = renderStream()
     const socket = FakeWebSocket.instances[0]
