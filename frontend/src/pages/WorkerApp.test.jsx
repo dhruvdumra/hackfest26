@@ -207,6 +207,34 @@ describe('WorkerApp', () => {
     vi.useRealTimers()
   })
 
+  it('re-reads the session status when the Two-Key answer arrives', async () => {
+    getSessionMock.mockResolvedValue({ ...SESSION_WITH_PASSPORT, status: 'waiting_consent' })
+    const { rerender } = render(
+      <WorkerApp sessionId="session-1" onSessionStart={vi.fn()} events={EVENTS} />,
+    )
+
+    expect(await screen.findByText(/waiting_consent/)).toBeInTheDocument()
+
+    getSessionMock.mockResolvedValue({ ...SESSION_WITH_PASSPORT, status: 'completed' })
+    rerender(
+      <WorkerApp
+        sessionId="session-1"
+        onSessionStart={vi.fn()}
+        events={[
+          ...EVENTS,
+          {
+            agent: 'ORCHESTRATOR',
+            status: 'done',
+            message: 'Kavya approved the plan',
+            data: { consent: 'accepted' },
+          },
+        ]}
+      />,
+    )
+
+    expect(await screen.findByText(/· completed ·/)).toBeInTheDocument()
+  })
+
   it('labels verified and unverified claims with a status badge, never colour alone', async () => {
     getSessionMock.mockResolvedValue(SESSION_WITH_PASSPORT)
     renderApp({ sessionId: 'session-1' })
@@ -292,7 +320,7 @@ describe('WorkerApp', () => {
         'The skills agent is still reading the transcript. The passport lands here as soon as the orchestrator writes it.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText('source pending')).toBeInTheDocument()
+    expect(screen.getByText('no data yet')).toBeInTheDocument()
     expect(
       screen.getByText(
         'A skill is needed before a work sample can be scored. The passport has not landed yet.',

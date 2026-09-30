@@ -19,7 +19,7 @@ const KNOB_ON_CLASS = 'translate-x-6 bg-chalk'
 const TRACK_CLASS = [
   'relative mt-0.5 h-6 w-11 shrink-0 rounded-full border transition-colors',
   'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2',
-  'peer-focus-visible:outline-ash',
+  'peer-focus-visible:outline-smoke',
   'peer-disabled:opacity-60',
 ].join(' ')
 // 16px knob in a 44px track at 2px inset, translated 24px — it lands flush
@@ -62,7 +62,7 @@ export default function Switch({
   const knobClass = checked ? KNOB_ON_CLASS : KNOB_OFF_CLASS
   const classes = [
     'flex cursor-pointer items-start gap-3',
-    'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ash',
+    'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-smoke',
     'has-disabled:cursor-not-allowed',
     className,
   ]

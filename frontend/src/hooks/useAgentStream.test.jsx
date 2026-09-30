@@ -154,6 +154,24 @@ describe('useAgentStream', () => {
     )
   })
 
+  it('plays nothing until it is enabled', () => {
+    const adapter = createAgentStreamAdapter({
+      source: 'simulated',
+      subscribe: vi.fn(() => () => {}),
+    })
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useAgentStream({ adapter, enabled }),
+      { initialProps: { enabled: false } },
+    )
+
+    expect(adapter.subscribe).not.toHaveBeenCalled()
+    expect(result.current.events).toEqual([])
+
+    rerender({ enabled: true })
+
+    expect(adapter.subscribe).toHaveBeenCalledOnce()
+  })
+
   it('unsubscribes from the stream adapter on unmount', () => {
     const unsubscribe = vi.fn()
     const adapter = createAgentStreamAdapter({

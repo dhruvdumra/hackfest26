@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSession, scoreWorkSample } from '../api.js'
+import { readConsent } from '../domain/consent.js'
 import { isAbortError } from '../lib/guards.js'
 import {
   bodyClass,
@@ -54,7 +55,7 @@ const SOURCE_DETAILS = {
   live: { label: 'live', source: 'live' },
   simulated: { label: 'simulated', source: 'simulated' },
   local: { label: 'local', source: 'local' },
-  pending: { label: 'source pending', source: 'pending' },
+  pending: { label: 'no data yet', source: 'pending' },
 }
 
 // One 1px Graphite rule plus 32px of air is what separates this panel's
@@ -282,6 +283,29 @@ export default function WorkerApp({
       }
     }
   }, [activeSessionId, applySession, baseUrl])
+
+  // Polling stops once the passport lands, and the passport lands before the
+  // Two-Key answer, so the status line would stay on its pre-consent value.
+  // Read the session once more when the answer arrives.
+  const consentState = readConsent(events)
+  const consentSettled = consentState !== 'idle' && consentState !== 'waiting'
+
+  useEffect(() => {
+    if (!consentSettled || !activeSessionId) {
+      return undefined
+    }
+
+    const controller = new AbortController()
+    getSession(activeSessionId, { baseUrl, signal: controller.signal })
+      .then(applySession)
+      .catch((requestError) => {
+        if (!isAbortError(requestError)) {
+          setSessionError(getErrorMessage(requestError))
+        }
+      })
+
+    return () => controller.abort()
+  }, [consentSettled, activeSessionId, applySession, baseUrl])
 
   useEffect(() => {
     if (!activeSessionId || passport !== null) {

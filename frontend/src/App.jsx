@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import AgentConsole from './components/AgentConsole.jsx'
 import GhostTwinPanel from './components/GhostTwinPanel.jsx'
 import Logo from './components/Logo.jsx'
@@ -6,16 +6,18 @@ import Manifesto from './components/Manifesto.jsx'
 import PipelineAgentGrid from './components/PipelineAgentGrid.jsx'
 import Reveal from './components/Reveal.jsx'
 import SessionCard from './components/SessionCard.jsx'
-import StageProgress from './components/StageProgress.jsx'
 import StatusBadge from './components/StatusBadge.jsx'
 import Switch from './components/Switch.jsx'
 import { Button } from './components/Button.jsx'
 import { useDemoMode } from './context/DemoModeContext.jsx'
-import { startSession } from './api.js'
+import { getHealth, startSession } from './api.js'
 import { useSessionStream } from './hooks/useSessionStream.js'
 import { useAgentStream } from './hooks/useAgentStream.js'
 import { normalizeAgentEvent } from './domain/agentEvents.js'
+import { describeBackendSource } from './domain/backendSource.js'
+import { readConsent } from './domain/consent.js'
 import HRConsole from './pages/HRConsole.jsx'
+import MarketRadar from './pages/MarketRadar.jsx'
 import RouteMap from './pages/RouteMap.jsx'
 import WorkerApp from './pages/WorkerApp.jsx'
 import {
@@ -37,106 +39,35 @@ const LOCAL_CONSENT_MESSAGES = {
   declined: 'Kavya said no · her Skill Passport stays private',
 }
 
-const DEMO_STAGES = [
-  { label: 'Understand', description: 'Recover durable skills' },
-  { label: 'Plan', description: 'Build a credible route' },
-  { label: 'Match', description: 'Compare fair work' },
-  { label: 'Audit', description: 'Challenge every score' },
+/* The five moments of the live demo, in the order the page now runs them.
+ * The numbers are the one sequence on the page that carries information: the
+ * presenter reads them to know where the next click is. */
+const DEMO_STEPS = [
+  { href: '#run', label: 'Run' },
+  { href: '#pipeline', label: 'Consent' },
+  { href: '#route', label: 'Route' },
+  { href: '#audit', label: 'Ghost Twin' },
+  { href: '#employer', label: 'Sign-off' },
 ]
 
-/** @type {Record<string, ('complete' | 'active' | 'upcoming')[]>} */
-const STAGE_STATUS_LABELS = {
-  idle: ['active', 'upcoming', 'upcoming', 'upcoming'],
-  streaming: ['active', 'upcoming', 'upcoming', 'upcoming'],
-  settled: ['complete', 'active', 'upcoming', 'upcoming'],
-}
-
-// The nav links the reference specifies. They are in-page anchors: the grid
-// above them is the agent catalogue, but PIPELINE has to land on the live run
-// the nav pill starts.
-const NAV_LINKS = [
-  { href: '#pipeline', label: 'Pipeline', isNew: false },
-  { href: '#route', label: 'Route map', isNew: false },
-  { href: '#audit', label: 'Audit', isNew: true },
-]
-
-/** The reference's nav: the wordmark carries the subtitle underneath. */
 const WORDMARK_CLASS = `${headingXsClass} font-medium ${chalkClass}`
 const WORDMARK_SUB_CLASS = `mt-1 block ${metaClass} ${smokeClass}`
-
-// 24px gaps, the reference's stated nav-link interval. The wordmark, the
-// divider and the links are one optical group, so the divider sits on the
-// group rather than being spaced off it.
-const NAV_LINK_CLASS =
-  'font-aeonik text-sm font-normal uppercase leading-none text-smoke transition-colors hover:text-chalk'
-const NAV_RULE_CLASS = 'text-iron'
-
-/* The nav collapses to a single row on mobile. At 390px the previous version
- * wrapped into four stacked rows — wordmark, divider, links, switch, pill —
- * producing a ~230px sticky header that covered the hero headline and ate a
- * third of the first screen. Three rules fix it:
- *
- *   1. The nav links hide below `md`. They are in-page anchors to sections far
- *      down the page; a phone user scrolls, and the four-row header was worth
- *      more than the shortcuts it offered.
- *   2. The wordmark subtitle, the divider and the switch's state word hide with
- *      the links, so the label shrinks to just "DEMO MODE" and the track keeps
- *      carrying the state by knob position alone.
- *   3. The switch label itself is hidden below `sm`. "ReRoute · [switch] · DEMO
- *      MODE · [pill]" needs about 430px; at 390px the label and the wordmark
- *      collided and overlapped. Below `sm` the switch is the track plus its
- *      accessible name only, which is a control a thumb can actually hit.
- */
-const NAV_GROUP_CLASS = 'flex min-w-0 items-center gap-3 sm:gap-4 md:gap-6'
-const NAV_LINK_LIST_CLASS = 'hidden items-center gap-6 md:flex'
 const NAV_ACTIONS_CLASS = 'flex shrink-0 items-center gap-3 sm:gap-4 md:gap-6'
-const NAV_DIVIDER_CLASS = `hidden ${NAV_RULE_CLASS} md:inline`
-const WORDMARK_WRAP_CLASS = 'flex min-w-0 flex-col'
+const STEP_LIST_CLASS = 'hidden items-center gap-1 lg:flex'
+const STEP_LINK_CLASS =
+  'group flex items-center gap-2 rounded-full px-3 py-2 font-aeonik text-sm uppercase leading-none tracking-button text-smoke transition-colors hover:text-chalk focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smoke'
+const STEP_NUMBER_CLASS =
+  'grid h-6 w-6 place-items-center rounded-full border border-iron font-input text-xs text-chalk'
+// A waiting consent is the one step that needs the presenter now. It takes the
+// Chalk ring and word, never amber: amber on this page only ever means FLAGGED.
+const STEP_WAITING_CLASS = 'border-chalk bg-chalk text-obsidian'
 
-// The 24px icon-avatar that sits inside the glossy pill: dark fill, light
-// glyph, circular. Specified for the nav CTA and part of the button's own
-// description, so the hero CTA carries the same mark.
 const LOGOMARK_CLASS =
-  'grid h-6 w-6 shrink-0 place-items-center rounded-full bg-obsidian text-[0.625rem] font-medium leading-none text-chalk'
+  'grid h-6 w-6 shrink-0 place-items-center rounded-full bg-obsidian text-xs font-medium leading-none text-chalk'
 
-/* ── Hero rhythm ──────────────────────────────────────────────────────────
- *
- * Three values, tightening as the eye moves down the block.
- *
- * The headline, its second line and the sub-headline are one thought, so they
- * share a tight cluster: 20px under the headline and 24px under it again to
- * the sub-headline. The badge is metadata about the page rather than part of
- * that thought, so it stands off by a full 32px. The buttons belong to the
- * badge's group and follow it closely.
- *
- * The previous version used 8 / 32 / 40 / 96 / 120px in an order that put a
- * 122px hole between the headline and its own sub-headline, which read as two
- * separate sections rather than one statement. Fewer values, and chosen so
- * that a gap grows as the content changes register rather than arbitrarily.
- */
 const HERO_CLASS = 'pt-8 lg:pt-14'
-const HERO_SUBHEAD_GAP_CLASS = 'mt-6'
-const HERO_BADGE_GAP_CLASS = 'mt-10'
-const HERO_ACTIONS_GAP_CLASS = 'mt-5'
-
-/* The hero is two columns: the argument on the left, the run itself on the
- * right.
- *
- * The old hero stacked the copy and then gave the full width underneath to a
- * decorative dot-map illustration. A split lets the right column carry the same
- * `events` array the WorkerApp panel reads, so the hero shows the pipeline
- * actually running rather than a drawing of a path — and the moment the reader
- * presses Run pipeline, the top of the page reacts.
- *
- * The console column is capped at 26rem rather than given half the grid. Half of
- * 1200px is a 560px log, where every row truncates to a few words and the column
- * reads as an empty table; 416px is wide enough for a full agent name and most
- * of a message, and it leaves the headline the 700px it needs to stay on two
- * lines at 63px. Below `lg` the grid collapses to one column and the console
- * sits under the copy, full width. */
 const HERO_GRID_CLASS =
-  'grid items-start gap-16 lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-20'
-
+  'grid items-start gap-16 lg:grid-cols-[minmax(0,1fr)_28rem] lg:gap-20'
 
 function Logomark() {
   return (
@@ -146,72 +77,64 @@ function Logomark() {
   )
 }
 
-/**
- * The nav links the reference specifies, as real anchors so the page's own
- * sections are reachable without scripting.
- */
-function NavLinks() {
+function DemoSteps({ consentWaiting }) {
   return (
-    <nav aria-label="Sections" className={NAV_LINK_LIST_CLASS}>
-      {NAV_LINKS.map((link) => (
-        <a key={link.href} href={link.href} className={NAV_LINK_CLASS}>
-          {link.label}
-          {link.isNew ? (
-            <sup className="ml-1 font-input text-[0.625rem] tracking-normal text-compass-gold">
-              new
-            </sup>
-          ) : null}
-        </a>
-      ))}
+    <nav aria-label="Demo steps">
+      <ol className={STEP_LIST_CLASS}>
+        {DEMO_STEPS.map((step, index) => {
+          const waiting = consentWaiting && step.href === '#pipeline'
+
+          return (
+            <li key={step.href}>
+              <a
+                href={step.href}
+                className={`${STEP_LINK_CLASS} ${waiting ? 'text-chalk' : ''}`}
+                aria-current={waiting ? 'step' : undefined}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`${STEP_NUMBER_CLASS} ${waiting ? STEP_WAITING_CLASS : ''}`}
+                >
+                  {index + 1}
+                </span>
+                {waiting ? `${step.label} waiting` : step.label}
+              </a>
+            </li>
+          )
+        })}
+      </ol>
     </nav>
   )
 }
 
 /**
- * A full-content-width 1px Graphite rule. The reference calls this "the single
- * most repeated visual element — it IS the page structure", so sections are
- * separated by the line and by air, never by a change of background.
- *
- * The 112px of air either side of the rule is the one place the section rhythm
- * is quoted from a token rather than a one-off number, so every section on the
- * page opens at the same distance from the one above it.
+ * A section of the page: a hairline, a heading that says what happens here,
+ * and one sentence of why. No eyebrow above the heading; the demo steps in the
+ * nav carry the sequence.
  *
  * @param {{
  *   children?: import('react').ReactNode,
  *   className?: string,
  *   id?: string,
- *   eyebrow?: string,
  *   title?: string,
  *   description?: string,
  * }} props
  */
-function Section({
-  children,
-  className = '',
-  id,
-  eyebrow,
-  title,
-  description,
-}) {
+function Section({ children, className = '', id, title, description }) {
   return (
     <section
       id={id}
       aria-labelledby={id ? `${id}-heading` : undefined}
-      className={`mt-28 border-t pt-16 ${ruleClass} ${className}`.trim()}
+      className={`mt-28 scroll-mt-24 border-t pt-16 ${ruleClass} ${className}`.trim()}
     >
-      {eyebrow === undefined && title === undefined ? null : (
-        <header className="mb-16">
-          {eyebrow === undefined ? null : (
-            <p className={`${metaClass} ${smokeClass} uppercase`}>{eyebrow}</p>
-          )}
-          {title === undefined ? null : (
-            <h2
-              id={id ? `${id}-heading` : undefined}
-              className={`mt-3 font-aeonik text-heading font-normal leading-heading ${chalkClass}`}
-            >
-              {title}
-            </h2>
-          )}
+      {title === undefined ? null : (
+        <header className="mb-12">
+          <h2
+            id={id ? `${id}-heading` : undefined}
+            className={`font-aeonik text-heading font-normal leading-heading ${chalkClass}`}
+          >
+            {title}
+          </h2>
           {description === undefined ? null : (
             <p className={`mt-4 ${readingClass} ${bodyClass} ${smokeClass}`}>
               {description}
@@ -230,13 +153,43 @@ export default function App() {
   const [startError, setStartError] = useState('')
   const [isStarting, setIsStarting] = useState(false)
   const [runSignal, setRunSignal] = useState(0)
+  const [demoRun, setDemoRun] = useState(0)
+  // Keyed by backend URL, so a change of backend reads as "checking" again
+  // without resetting state inside the effect.
+  const [healthReport, setHealthReport] = useState(
+    /** @type {{ url: string | null, value: object | 'down' | null }} */ ({ url: null, value: null }),
+  )
 
-  const fallback = useAgentStream()
+  // The recorded run plays only in demo mode, and only once Run is pressed;
+  // each press replays it from the first event.
+  const recording = useAgentStream({
+    enabled: demoMode && demoRun > 0,
+    sessionId: `demo-run-${demoRun}`,
+  })
   const stream = useSessionStream({
     sessionId,
     enabled: Boolean(sessionId) && !demoMode,
     baseUrl: backendBaseUrl,
   })
+
+  useEffect(() => {
+    if (demoMode) {
+      return undefined
+    }
+
+    const controller = new AbortController()
+    getHealth({ baseUrl: backendBaseUrl, signal: controller.signal })
+      .then((next) => setHealthReport({ url: backendBaseUrl, value: next }))
+      .catch((error) => {
+        if (error?.name !== 'AbortError') {
+          setHealthReport({ url: backendBaseUrl, value: 'down' })
+        }
+      })
+
+    return () => controller.abort()
+  }, [backendBaseUrl, demoMode])
+
+  const health = healthReport.url === backendBaseUrl ? healthReport.value : null
 
   const usingLiveTransport = !demoMode && Boolean(sessionId)
   // In demo mode there is no session to answer the Two-Key question, so the
@@ -247,10 +200,14 @@ export default function App() {
       return stream.events
     }
 
+    if (!demoMode) {
+      return []
+    }
+
     return localConsentEvent === null
-      ? fallback.events
-      : [...fallback.events, localConsentEvent]
-  }, [usingLiveTransport, stream.events, fallback.events, localConsentEvent])
+      ? recording.events
+      : [...recording.events, localConsentEvent]
+  }, [usingLiveTransport, demoMode, stream.events, recording.events, localConsentEvent])
 
   const handleLocalConsent = useCallback((decision) => {
     setLocalConsentEvent(
@@ -271,89 +228,62 @@ export default function App() {
       setIsStarting(true)
       setStartError('')
       setLocalConsentEvent(null)
+
+      if (demoMode) {
+        setDemoRun((current) => current + 1)
+      }
+
       try {
         const started = await startSession(payload, { baseUrl: backendBaseUrl })
         setSessionId(started.session_id)
       } catch (requestError) {
-        setStartError(
-          requestError instanceof Error ? requestError.message : 'Could not start the session.',
-        )
+        // Demo mode exists for when no backend answers; the recording is the run.
+        if (!demoMode) {
+          setStartError(
+            requestError instanceof Error ? requestError.message : 'Could not start the session.',
+          )
+        }
       } finally {
         setIsStarting(false)
       }
     },
-    [backendBaseUrl],
+    [backendBaseUrl, demoMode],
   )
 
   const isStreaming = isStarting || (usingLiveTransport && stream.status === 'connecting')
+  const consentWaiting = readConsent(events) === 'waiting'
+  const source = describeBackendSource({ demoMode, health, backendBaseUrl })
 
-  // The reference puts two glossy pills on this page — the nav CTA and the hero
-  // CTA — and both are the same primary action, so both raise the same signal.
-  // The form is the only thing that knows the transcript, hence the counter
-  // rather than a duplicated request.
+  // Both glossy pills are the same primary action; the form holds the
+  // transcript, so they raise a signal rather than duplicate the request.
   const requestRun = useCallback(() => {
     setRunSignal((current) => current + 1)
   }, [])
 
-  // No per-stage progress signal exists in the session or event payload, so the
-  // stage track is driven by the two states the app already knows: whether a
-  // session is open, and whether its stream is still settling.
-  const stages = useMemo(() => {
-    const phase = sessionId
-      ? isStreaming
-        ? 'streaming'
-        : 'settled'
-      : 'idle'
-    const statuses = STAGE_STATUS_LABELS[phase]
-
-    return DEMO_STAGES.map((stage, index) => ({
-      ...stage,
-      status: statuses[index],
-    }))
-  }, [isStreaming, sessionId])
-
   const isBusy = isStreaming || (isStarting && !sessionId)
 
-  // "VIEW ROUTE ↓" is the reference's reveal/scroll action, so it moves to the
-  // route section rather than doing anything to the session. Anchors already
-  // cover the nav links; this is the only button that has to reach for one.
-  const scrollToRoute = useCallback(() => {
-    document.getElementById('route')?.scrollIntoView({ behavior: 'smooth' })
+  const scrollToAudit = useCallback(() => {
+    document.getElementById('audit')?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
   return (
     <div className="min-h-dvh bg-obsidian font-aeonik text-chalk">
-      {/* Nav: it floats over the canvas with no bottom border at the very top,
-          per the reference, and it earns a hairline only once content scrolls
-          underneath. Because it has to read over whatever is passing beneath, it
-          gets a scrim rather than the drop shadow the reference forbids — and
-          the scrim is fully opaque rather than translucent, because at 80% the
-          hero headline was visibly showing through the bar as it scrolled past,
-          which is exactly the collision the scrim exists to prevent. */}
       <header className="sticky top-0 z-50">
         <div className="bg-obsidian">
           <div
             className={`${pageColumnClass} flex items-center justify-between gap-4 py-4 md:py-5`}
           >
-            <div className={NAV_GROUP_CLASS}>
-              <div className={WORDMARK_WRAP_CLASS}>
+            <div className="flex min-w-0 items-center gap-6">
+              <div className="flex min-w-0 flex-col">
                 <span className={WORDMARK_CLASS}>ReRoute</span>
                 <span className={`${WORDMARK_SUB_CLASS} hidden md:block`}>
                   Career orchestration
                 </span>
               </div>
-              <span aria-hidden="true" className={NAV_DIVIDER_CLASS}>
-                |
-              </span>
-              <NavLinks />
+              <DemoSteps consentWaiting={consentWaiting} />
             </div>
 
             <div className={NAV_ACTIONS_CLASS}>
-              {/* The label is hidden below `sm`: "ReRoute · [switch] · DEMO MODE
-                  · [pill]" needs about 430px, so at 390px the label collided
-                  with the wordmark. The track is still a 44px touch target and
-                  the checkbox keeps `aria-label`, so the control is announced by
-                  name and is operable by thumb either way. */}
               <Switch
                 id="demo-mode"
                 checked={demoMode}
@@ -373,62 +303,38 @@ export default function App() {
               </Button>
             </div>
           </div>
-          {/* The hairline the reference says the nav earns once content scrolls
-              under it. This is the only place on the page a border sits on the
-              header. */}
           <div aria-hidden="true" className="h-px bg-graphite" />
         </div>
       </header>
 
       <main>
-        {/* Hero, left-aligned: the reference is explicit that a working tool
-            does not take the source's centred marketing hero.
-            Display steps 32 → 44 → 63px on the same leading and tracking.
-
-            The base step is 32px, not the scale's 34px. At 34px "Every agent,"
-            overflowed the 390px content measure and the headline broke into four
-            ragged lines — "Every / agent, / in / sequence." — which destroyed the
-            two-line shape the whole composition is built on. 32px holds the
-            first line as one unit, so the block is two lines on a phone and two
-            lines on a desktop, which is the point of the line break. The 34px
-            scale entry is still used by section headings. */}
-        <div className={`${pageColumnClass} ${HERO_CLASS}`}>
+        <div id="run" className={`${pageColumnClass} ${HERO_CLASS} scroll-mt-24`}>
           <div className={HERO_GRID_CLASS}>
             <div className="min-w-0">
               <Reveal>
                 <h1
                   id="demo-title"
-                  // `typeDisplayClass` is the display voice with no size of its own.
-                  // The old `displayClass` carried `text-display` (63px), and since
-                  // both land in the same cascade layer the token won at every width
-                  // below `lg` — the headline was still 63px at 390px and broke into
-                  // four ragged lines. The size is claimed here instead.
                   className={`${typeDisplayClass} ${chalkClass} text-[2rem] sm:text-heading-lg lg:text-display`}
                 >
-                  Every agent,
-                  <span className={`block italic ${smokeClass}`}>in sequence.</span>
+                  AI automated Kavya’s job.
+                  <span className="block italic">Six agents find her way back.</span>
                 </h1>
               </Reveal>
 
-              <Reveal delay={70} className={HERO_SUBHEAD_GAP_CLASS}>
+              <Reveal delay={70} className="mt-6">
                 <p className={`${subheadingClass} ${readingClass} ${smokeClass}`}>
-                  A transparent view of the orchestration backbone as ReRoute
-                  turns a career transition into a fair, evidence-led plan.
+                  Four years testing payments, then an 18-month caregiving
+                  break, and every hiring filter says no. ReRoute proves her
+                  skills, plans a paid route that fits 10 hours a week, and
+                  audits every score for bias.
                 </p>
               </Reveal>
 
-              {/* The reference's own example prompt orders this block headline →
-                  sub-headline → badge → buttons, which is what is built here; the
-                  summary list in the build instructions puts the badge first, and
-                  the component spec is the more specific of the two. */}
-              <Reveal delay={140} className={HERO_BADGE_GAP_CLASS}>
-                <StatusBadge
-                  live={!demoMode}
-                  label={`SLICE 04 · DEMO MODE ${demoMode ? 'ON' : 'OFF'}`}
-                />
+              <Reveal delay={140} className="mt-10">
+                <StatusBadge live={source.live} label={source.label} />
               </Reveal>
 
-              <Reveal delay={210} className={HERO_ACTIONS_GAP_CLASS}>
+              <Reveal delay={210} className="mt-5">
                 <div className="flex flex-wrap items-center gap-4">
                   <Button
                     variant="glossy"
@@ -440,17 +346,14 @@ export default function App() {
                     <Logomark />
                     Run pipeline
                   </Button>
-                  <Button variant="ghost" arrow="↓" onClick={scrollToRoute}>
-                    View route
+                  <Button variant="ghost" arrow="↓" onClick={scrollToAudit}>
+                    See the bias audit
                   </Button>
                 </div>
               </Reveal>
             </div>
 
-            {/* The live run, not a picture of one. It reads the same `events`
-                the WorkerApp panel below does, so the two columns cannot drift
-                apart, and the console sits in the hero rather than below the
-                fold where a run would only be visible after a scroll. */}
+            {/* The run itself: the same events the worker panel reads. */}
             <Reveal delay={280} className="min-w-0">
               <AgentConsole events={events} isStreaming={isStreaming} />
             </Reveal>
@@ -459,86 +362,49 @@ export default function App() {
 
         <div className={pageColumnClass}>
           <Section
-            eyebrow="The pipeline"
-            title="Six agents, one ordered run."
-            description="Each agent takes the previous one's output and narrows the decision. The seventh node in the graph is the human gate, not an agent — which is why the count here is six."
-          >
-            <Reveal>
-              <PipelineAgentGrid />
-            </Reveal>
-          </Section>
-
-          <Section
-            eyebrow="A recorded run"
-            title="What a finished run looks like."
-            description="One session end to end, with the persona, the pivot and the date it happened. Nothing here claims an outcome the backend cannot evidence."
-          >
-            <Reveal>
-              <SessionCard />
-            </Reveal>
-          </Section>
-
-          {/* The Manifesto brings its own hairline and centred layout, so it is
-              not wrapped in <Section> — a left-aligned header above a centred
-              block put two alignment systems in one section. */}
-          <Reveal>
-            <Manifesto />
-          </Reveal>
-
-          <Section
             id="pipeline"
-            eyebrow="Stage 01 · Skills discovery"
-            title="Worker intake & skill passport."
-            description="Speak or paste what Kavya actually did, then let the pipeline recover durable skills instead of keywords."
+            title="Her story in, her skills out."
+            description="Paste or speak what Kavya actually did. Skills Discovery turns it into a Skill Passport, and nothing leaves ReRoute until she says yes."
           >
-            {/* The Stage track belongs to this section's header block rather
-                than being a separate module, so it follows the description at
-                the header's own 64px rhythm instead of at a second, larger gap. */}
-            <Reveal className="mt-16">
-              <StageProgress stages={stages} />
-            </Reveal>
-            <div className="mt-16">
-              <WorkerApp
-                baseUrl={backendBaseUrl}
-                sessionId={sessionId}
-                onSessionStart={handleSessionStart}
-                events={events}
-                isStreaming={isStreaming}
-                runSignal={runSignal}
-                liveSession={usingLiveTransport}
-                onLocalConsent={handleLocalConsent}
-              />
-            </div>
+            <WorkerApp
+              baseUrl={backendBaseUrl}
+              sessionId={sessionId}
+              onSessionStart={handleSessionStart}
+              events={events}
+              isStreaming={isStreaming}
+              runSignal={runSignal}
+              liveSession={usingLiveTransport}
+              onLocalConsent={handleLocalConsent}
+            />
             {startError === '' ? null : (
-              <Reveal delay={60}>
-                <div role="alert" className="mt-12 space-y-3">
-                  <p className={`${metaClass} ${smokeClass} uppercase`}>
-                    Session could not start
-                  </p>
-                  <p className={`${readingClass} ${bodyClass} ${chalkClass}`}>
-                    {startError}
-                  </p>
-                </div>
-              </Reveal>
+              <div role="alert" className="mt-12 space-y-3">
+                <p className={`${metaClass} ${smokeClass} uppercase`}>
+                  Session could not start
+                </p>
+                <p className={`${readingClass} ${bodyClass} ${chalkClass}`}>
+                  {startError}
+                </p>
+              </div>
             )}
           </Section>
 
           <Section
             id="route"
-            eyebrow="Stage 02 · Market intelligence"
-            title="Displacement and demand, before you commit."
-            description="How exposed the current role is, and whether the local demand behind it is still growing."
+            title="A paid route she can walk at 10 hours a week."
+            description="Market Intelligence checks which roles are growing in her city. The Career GPS then finds the shortest bridge from the skills she has proven, on the SAP HANA Cloud skills graph."
           >
             <Reveal>
+              <MarketRadar baseUrl={backendBaseUrl} />
+            </Reveal>
+            <Reveal className="mt-24">
               <RouteMap baseUrl={backendBaseUrl} />
             </Reveal>
           </Section>
 
           <Section
             id="audit"
-            eyebrow="Stage 06 · Bias audit"
-            title="Rewrite the filter, not the shortlist."
-            description="What an employer's own job post does to their shortlist, and the evidence-led wording ReRoute swaps in once the audit flags the post."
+            title="Change who she is. The score must not move."
+            description="Ghost Twins re-score Kavya with one thing changed at a time: her career gap, gender, age, college or city. A fair screen stays flat. A legacy screen moves, and the audit freezes the decision."
           >
             <Reveal>
               <GhostTwinPanel baseUrl={backendBaseUrl} />
@@ -547,23 +413,42 @@ export default function App() {
 
           <Section
             id="employer"
-            eyebrow="Stage 05 · Employer readiness"
-            title="The employer's side of the same run."
-            description="A simulated shortlist rewrite showing how many candidates a filter would otherwise hide."
+            title="Fix the employer’s filter, not the shortlist."
+            description="The job post that hid her, rewritten from the audit, and signed off by a hiring manager before anything is published."
           >
             <Reveal>
               <HRConsole baseUrl={backendBaseUrl} />
             </Reveal>
           </Section>
+
+          <Section
+            title="Six agents, one ordered run."
+            description="Each agent takes the previous one's output and narrows the decision. The seventh node in the graph is the human gate."
+          >
+            <Reveal>
+              <PipelineAgentGrid />
+            </Reveal>
+          </Section>
+
+          <Section
+            title="What a finished run looks like."
+            description="One session end to end, with the persona, the pivot and the date it happened."
+          >
+            <Reveal>
+              <SessionCard />
+            </Reveal>
+          </Section>
+
+          <Reveal>
+            <Manifesto />
+          </Reveal>
         </div>
       </main>
 
-      {/* Footer: 1px Graphite top border, transparent, 32px of vertical air. No
-          fill. */}
       <footer className={`mt-28 border-t py-8 ${ruleClass}`}>
         <div className={pageColumnClass}>
           <p className={`font-aeonik text-sm font-normal ${chalkClass}`}>
-            Team ReRoute · SRM University AP
+            Team ReRoute · SRM University-AP
           </p>
           <p className={`mt-2 ${metaClass} ${smokeClass}`}>
             github.com/mevarx/hackfest26 · SAP Hackfest 2026

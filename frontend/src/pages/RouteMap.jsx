@@ -106,7 +106,7 @@ const SOURCE_DETAILS = {
     detail: 'Answered from the bundled local fixture',
   },
   pending: {
-    label: 'source pending',
+    label: 'no route yet',
     source: 'pending',
     detail: 'No route has been returned yet',
   },
@@ -394,16 +394,7 @@ export default function RouteMap({
     >
       <div className="space-y-16">
         <form className={SECTION_CLASS} onSubmit={handleSubmit}>
-          {/* The badge describes the route below, so it shares the row that
-              introduces it. It used to be the Card's `actions` slot, which
-              orphaned it above a hairline that separated it from nothing. */}
-          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-            <p className={sectionHeadingClass}>Plan a different route</p>
-            <StatusBadge
-              live={sourceDetails.source === 'live'}
-              label={sourceDetails.label}
-            />
-          </div>
+          <p className={sectionHeadingClass}>Plan a different route</p>
 
           <div className="mt-8 grid gap-8 sm:grid-cols-3">
             <Field id="route-from-skill" label="From skill">

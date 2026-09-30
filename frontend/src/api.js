@@ -204,6 +204,12 @@ function withQuery(path, entries) {
   return queryString ? `${path}?${queryString}` : path
 }
 
+export function getHealth(options) {
+  const { baseUrl, signal } = options ?? {}
+
+  return requestJson('/health', { baseUrl, signal })
+}
+
 export function startSession(payload, options) {
   const { baseUrl, signal } = options ?? {}
 

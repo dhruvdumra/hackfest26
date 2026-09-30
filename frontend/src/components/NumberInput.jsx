@@ -9,7 +9,7 @@ const STEPPER_ROW_CLASS = 'absolute right-1 top-1 flex flex-col gap-0.5'
 const STEPPER_BUTTON_CLASS = [
   'grid h-4 w-6 place-items-center rounded-[4px] transition-colors',
   'hover:bg-graphite hover:text-chalk',
-  'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ash',
+  'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-smoke',
   smokeClass,
 ].join(' ')
 

@@ -49,14 +49,14 @@ describe('AgentConsole', () => {
 
   it('caps the visible rows but reports the true event total', () => {
     const events = normalizeAll(MOCK_AGENT_EVENTS)
-    // MOCK_AGENT_EVENTS is 14 events, so this also proves the cap is below the
+    // MOCK_AGENT_EVENTS is 14 events and the cap is 7, so this also proves the cap is below the
     // fixture length rather than coincidentally equal to it.
     expect(events.length).toBeGreaterThan(10)
 
     render(<AgentConsole events={events} />)
 
     const log = screen.getByRole('list', { name: 'Agent event stream' })
-    expect(within(log).getAllByRole('listitem')).toHaveLength(10)
+    expect(within(log).getAllByRole('listitem')).toHaveLength(7)
     expect(screen.getByText(`${events.length} events`)).toBeInTheDocument()
     // The newest event survives the cap; the oldest does not.
     expect(

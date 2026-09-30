@@ -168,7 +168,7 @@ describe('RouteMap', () => {
 
     // Before a route exists the source is a gap, not a state: the badge says so
     // and keeps the untinted Iron outline.
-    const pendingBadge = within(panelHeader()).getByText('source pending')
+    const pendingBadge = within(panelHeader()).getByText('no route yet')
 
     expect(pendingBadge).toHaveClass('rounded-badge')
     expect(pendingBadge.querySelector('[data-status-dot]')).toHaveClass(
