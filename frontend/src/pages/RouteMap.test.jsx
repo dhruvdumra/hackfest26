@@ -168,7 +168,7 @@ describe('RouteMap', () => {
 
     // Before a route exists the source is a gap, not a state: the badge says so
     // and keeps the untinted Iron outline.
-    const pendingBadge = within(panelHeader()).getByText('source pending')
+    const pendingBadge = within(panelHeader()).getByText('no route yet')
 
     expect(pendingBadge).toHaveClass('rounded-badge')
     expect(pendingBadge.querySelector('[data-status-dot]')).toHaveClass(
@@ -223,6 +223,13 @@ describe('RouteMap', () => {
 
     settle()
     await waitFor(() => expect(section).toHaveAttribute('aria-busy', 'false'))
+  })
+
+  it('opens on API testing, the proven skill the pipeline starts her route from', () => {
+    render(<RouteMap />)
+
+    expect(screen.getByLabelText('From skill')).toHaveValue('API testing')
+    expect(screen.getByLabelText('Target role')).toHaveValue('qa-analyst')
   })
 
   it('renders an empty state with a call to action before any route is requested', () => {

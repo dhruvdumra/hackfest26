@@ -1,77 +1,82 @@
 import {
   chalkClass,
-  headingSmClass,
+  dataLabelClass,
+  headingClass,
   manifestoClass,
-  metaClass,
+  ruleClass,
   smokeClass,
 } from '../styles/classes.js'
 import Button from './Button.jsx'
 
-// Copy is quoted verbatim by the reference, so the defaults below are the
-// spec's own sentences and the props exist only to make the block testable.
-const DEFAULT_EYEBROW = 'The Two-Key rule'
 const DEFAULT_TITLE = 'Why ReRoute?'
 const DEFAULT_BODY =
   'AI proposes, a human decides on every high-stakes step. Rejections, terminations and pay are never automated.'
-// The button label is already set in the spec's small-caps form rather than left
-// to the button's own `text-transform`, so the rendered text matches the
-// reference either way.
-const DEFAULT_CTA = 'READ THE TWO-KEY RULE'
 
-// Aeonik 16px in Smoke on 24px of leading, which is the one place the reference
-// deliberately overrides the type scale's body leading. The body is a short
-// centred statement and 24px is what the spec asks for, so this is a local
-// choice and not a missing token.
-const BODY_CLASS = `mt-6 font-aeonik text-body font-normal leading-6 ${smokeClass}`
+// The Two-Key rule, spelled out where it used to be a button pointing at
+// nothing: each key is held by a person the demo has already shown.
+const DEFAULT_KEYS = [
+  {
+    holder: 'Key 1 · Kavya',
+    rule: 'Nothing about her leaves ReRoute until she says yes.',
+  },
+  {
+    holder: 'Key 2 · The hiring manager',
+    rule: 'No rewritten job post goes live until a person signs it off.',
+  },
+]
 
-const CTA_CLASS = 'mt-10'
+const DEFAULT_CTA = 'Back to the start'
+
+const BODY_CLASS = `mx-auto mt-6 font-aeonik text-body font-normal leading-6 ${smokeClass} ${manifestoClass}`
 
 /**
- * Manifesto block: the one place the page stops being full-bleed and reads as a
- * single centred statement.
- *
- * The reference is explicit that this block is centred while everything around
- * it is left-aligned, so the centring is kept — but a centred block hanging
- * under a left-aligned page with no marker read as a mistake rather than as a
- * deliberate refrain. The eyebrow is what makes the shift legible: it carries
- * the same mono label every other section opens with, so the reader sees a
- * normal section that simply chose a different internal alignment.
- *
- * The block brings its own hairline and air rather than sitting inside App's
- * `<Section>`, because that helper emits a left-aligned header and would put the
- * two alignment systems back in conflict inside one block.
+ * The page's close: the question the whole demo answers, and the rule that
+ * answers it. Centred, because it is one statement rather than a panel, with
+ * the two keys side by side so the rule reads as two people, not a slogan.
  *
  * @param {{
- *   eyebrow?: string,
  *   title?: string,
  *   body?: string,
+ *   keys?: Array<{ holder: string, rule: string }>,
  *   ctaLabel?: string,
  *   onCtaClick?: () => void,
  *   className?: string,
  * }} props
  */
 export default function Manifesto({
-  eyebrow = DEFAULT_EYEBROW,
   title = DEFAULT_TITLE,
   body = DEFAULT_BODY,
+  keys = DEFAULT_KEYS,
   ctaLabel = DEFAULT_CTA,
   onCtaClick,
   className = '',
 }) {
   return (
     <section
-      className={`mt-28 border-t border-graphite pt-20 text-center ${className}`.trim()}
+      aria-labelledby="manifesto-title"
+      className={`mt-28 border-t ${ruleClass} pt-20 text-center ${className}`.trim()}
     >
-      <div className={`mx-auto ${manifestoClass}`}>
-        <p className={`${metaClass} ${smokeClass} uppercase`}>{eyebrow}</p>
-        <h2 className={`mt-3 ${headingSmClass} ${chalkClass}`}>{title}</h2>
-        <p className={BODY_CLASS}>{body}</p>
-        {/* Ghost Outline, and a down arrow: the target is further down the page,
-            which is the reference's rule for the arrow glyph. */}
-        <Button variant="ghost" arrow="↓" className={CTA_CLASS} onClick={onCtaClick}>
+      <h2 id="manifesto-title" className={`${headingClass} ${chalkClass}`}>
+        {title}
+      </h2>
+      <p className={BODY_CLASS}>{body}</p>
+
+      <ul className="mx-auto mt-12 grid max-w-[50rem] gap-8 text-left sm:grid-cols-2">
+        {keys.map((key) => (
+          <li key={key.holder} className={`border-t ${ruleClass} pt-4`}>
+            <p className={dataLabelClass}>{key.holder}</p>
+            <p className={`mt-2 font-aeonik text-body font-normal leading-6 ${chalkClass}`}>
+              {key.rule}
+            </p>
+          </li>
+        ))}
+      </ul>
+
+      {typeof onCtaClick === 'function' ? (
+        <Button variant="ghost" arrow="↑" className="mt-12" onClick={onCtaClick}>
           {ctaLabel}
         </Button>
-      </div>
+      ) : null}
     </section>
   )
 }

@@ -1,0 +1,9 @@
+RANK,ROLE,CITY,EXPOSURE,DEMAND,OPENINGS,MEDIAN_PAY,SIGNAL
+1,manual-testing-technician,Chennai,high,contracting,4,420000,Automation tooling is absorbing entry-level manual testing seats.
+2,qa-test-associate,Chennai,high,steady,7,450000,Backfill demand exists but pays below the current manual tester salary.
+3,support-operations-lead,Chennai,moderate,growing,11,660000,Escalation desks keep absorbing testers who triage defects well.
+4,data-quality-analyst,Chennai,moderate,growing,6,780000,SQL data validation is the cheapest bridge from manual testing.
+5,qa-analyst,Chennai,low,growing,14,620000,"Reachable with a short bridge, but pays slightly under the current seat."
+6,qa-automation-engineer,Bengaluru,moderate,growing,23,1180000,"Highest paid bridge, but it needs scripting evidence she does not have yet."
+7,product-analyst,Bengaluru,low,steady,9,900000,Requirements interpretation transfers directly from test planning.
+8,test-manager,Hyderabad,low,steady,5,1350000,A three-to-five year route once release verification evidence exists.

@@ -20,7 +20,9 @@ import Select from '../components/Select.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
 import TextInput from '../components/TextInput.jsx'
 
-const DEFAULT_FROM_SKILL = 'Manual testing'
+// The pipeline starts Kavya's route from the proven skill with the shortest
+// bridge, API testing, so the planner opens on that same question.
+const DEFAULT_FROM_SKILL = 'API testing'
 const DEFAULT_TARGET_ROLE = 'qa-analyst'
 const DEFAULT_HOURS_PER_WEEK = 10
 // Must mirror the API's RouteRequest bounds, or the panel submits values the
@@ -106,7 +108,7 @@ const SOURCE_DETAILS = {
     detail: 'Answered from the bundled local fixture',
   },
   pending: {
-    label: 'source pending',
+    label: 'no route yet',
     source: 'pending',
     detail: 'No route has been returned yet',
   },
@@ -394,16 +396,7 @@ export default function RouteMap({
     >
       <div className="space-y-16">
         <form className={SECTION_CLASS} onSubmit={handleSubmit}>
-          {/* The badge describes the route below, so it shares the row that
-              introduces it. It used to be the Card's `actions` slot, which
-              orphaned it above a hairline that separated it from nothing. */}
-          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-            <p className={sectionHeadingClass}>Plan a different route</p>
-            <StatusBadge
-              live={sourceDetails.source === 'live'}
-              label={sourceDetails.label}
-            />
-          </div>
+          <p className={sectionHeadingClass}>Plan a different route</p>
 
           <div className="mt-8 grid gap-8 sm:grid-cols-3">
             <Field id="route-from-skill" label="From skill">

@@ -10,6 +10,7 @@ from app.api import audit, health, learning_pathway, market, matching, sessions,
 from app.api.sessions import ORCHESTRATION_TASKS_STATE_KEY
 from app.config import Settings, get_settings
 from app.services import hana_client
+from app.services.employer_decisions import EmployerDecisionLog
 from app.storage.session_store import SessionStore, SqliteSessionStore
 
 ORCHESTRATION_DRAIN_SECONDS = 10.0
@@ -41,6 +42,7 @@ def create_app(
     )
     application.state.settings = resolved_settings
     application.state.session_store = resolved_store
+    application.state.employer_decisions = EmployerDecisionLog()
     application.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origins,

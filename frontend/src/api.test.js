@@ -60,7 +60,7 @@ describe('API URL helpers', () => {
     )
   })
 
-  it('resolves a safe base url and the demo-safe local backend', () => {
+  it('keeps the configured backend in demo mode and falls back to the local one without it', () => {
     expect(getApiBaseUrlSafe(' https://api.example.test// ')).toBe(
       'https://api.example.test',
     )
@@ -71,7 +71,7 @@ describe('API URL helpers', () => {
     )
     expect(
       resolveApiBaseUrl({ baseUrl: 'https://api.example.test', demoMode: true }),
-    ).toBe(DEFAULT_BACKEND_BASE_URL)
+    ).toBe('https://api.example.test')
   })
 })
 

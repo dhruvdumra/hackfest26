@@ -164,23 +164,18 @@ function readStatusBadge(word) {
   return { badge, dot }
 }
 
-/* The panel opens on the legacy screen, so a test that wants the fair screen
- * has to say so. Without this helper each such test would either click the
- * toggle and read as if it were testing the default, or silently inherit
- * whichever mode the panel happens to start in — which is how the demo-order
- * change would have been able to pass unnoticed. */
+/* Tests say which screen they audit rather than inheriting the default, so a
+ * change of default can never pass unnoticed. */
 function chooseScoringMode(mode) {
-  const toggle = screen.getByRole('checkbox', { name: 'Simulate Legacy ATS' })
-  const wantLegacy = mode === 'legacy'
+  const choice = screen.getByRole('radio', {
+    name: mode === 'legacy' ? 'Legacy ATS' : 'Fair screen',
+  })
 
-  // getByRole narrows by role, not by element type, so the cast is what makes
-  // `.checked` typecheck. toBeChecked() below reads the same property through
-  // jest-dom, which is why the existing assertions never needed it.
-  if (/** @type {HTMLInputElement} */ (toggle).checked !== wantLegacy) {
-    fireEvent.click(toggle)
+  if (!(/** @type {HTMLInputElement} */ (choice).checked)) {
+    fireEvent.click(choice)
   }
 
-  return toggle
+  return choice
 }
 
 describe('GhostTwinPanel', () => {
@@ -196,33 +191,31 @@ describe('GhostTwinPanel', () => {
     vi.unstubAllGlobals()
   })
 
-  it('opens on the legacy screen so the demo lands on the finding', () => {
+  it('opens on the fair screen so the demo runs the control first', () => {
     render(<GhostTwinPanel />)
 
-    // Deliberate, not an oversight. The fair screen is PASS with max_delta 0,
-    // which a judge reads as "the audit found nothing" — and the actual
-    // finding is one toggle away. Opening on the legacy screen puts the
-    // amber verdict and the moving rows in front of them on the first click.
-    expect(
-      screen.getByRole('checkbox', { name: 'Simulate Legacy ATS' }),
-    ).toBeChecked()
-    expect(screen.getByText('Simulated legacy ATS')).toBeInTheDocument()
-    expect(screen.queryByText('Synthetic fair merit')).not.toBeInTheDocument()
+    // PASS first, then the flip to Legacy ATS: the order is the argument.
+    expect(screen.getByRole('radio', { name: 'Fair screen' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Legacy ATS' })).not.toBeChecked()
+    expect(screen.getByText('ReRoute fair screen')).toBeInTheDocument()
+    expect(screen.queryByText('Legacy ATS screen')).not.toBeInTheDocument()
   })
 
-  /* The demo in one test: a judge who opens the panel, presses Run Audit and
-   * reads nothing else must still see a FLAGGED verdict, a non-zero max delta,
-   * and the offending rows. This is the path the hackathon actually runs, and
-   * it is the one a default-state regression would silently break. */
-  it('lands a judge on FLAGGED from the very first press', async () => {
+  /* The demo's flip in one test: switch to Legacy ATS, press Run Audit, and
+   * the verdict must say FLAGGED, name the twin that moved and show its number
+   * large enough to read from the back of the room. */
+  it('shows the finding in one number and one sentence on the legacy screen', async () => {
     fetchMock.mockResolvedValue(successfulResponse(LEGACY_RESULT))
     render(<GhostTwinPanel />)
 
+    chooseScoringMode('legacy')
     fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
 
     await screen.findByText('FLAGGED')
-    expect(screen.getByText('Fairness guardrail needs attention')).toBeInTheDocument()
-    expect(screen.getByText('Simulated legacy ATS')).toBeInTheDocument()
+    expect(screen.getByText('This screen charges her for who she is.')).toBeInTheDocument()
+    expect(screen.getByText('Legacy ATS screen')).toBeInTheDocument()
+    expect(screen.getByTestId('verdict-delta')).toHaveClass('text-flagged')
+    expect(screen.getByTestId('verdict-sentence')).toHaveTextContent(/^Change only her /)
 
     // The finding, stated as numbers rather than as a verdict word.
     const tiles = within(screen.getByRole('table'))
@@ -239,6 +232,7 @@ describe('GhostTwinPanel', () => {
     fetchMock.mockResolvedValue(successfulResponse(FAIR_RESULT))
     render(<GhostTwinPanel baseUrl="https://reroute.example" />)
 
+    chooseScoringMode('legacy')
     fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
@@ -278,9 +272,7 @@ describe('GhostTwinPanel', () => {
 
     expect(runButton).toBeDisabled()
     expect(runButton).toHaveTextContent('Running audit…')
-    expect(
-      screen.getByRole('checkbox', { name: 'Simulate Legacy ATS' }),
-    ).toBeDisabled()
+    expect(screen.getByRole('radio', { name: 'Legacy ATS' })).toBeDisabled()
     expect(screen.getByText('Loading audit…')).toBeInTheDocument()
 
     resolveRequest(successfulResponse(FAIR_RESULT))
@@ -340,7 +332,7 @@ describe('GhostTwinPanel', () => {
     expect(secondRowCells[0]).toHaveTextContent('86')
     expect(secondRowCells[1]).toHaveTextContent('86')
     expect(secondRowCells[2]).toHaveTextContent('0')
-    expect(screen.getByText('Fairness guardrail passed')).toBeInTheDocument()
+    expect(screen.getByText('Her score does not move.')).toBeInTheDocument()
     expect(screen.getByText('Source=local')).toBeInTheDocument()
     // The header badge follows the response rather than assuming a source, and
     // a settled in-process run is not a live one: its prefix dot is the Graphite
@@ -357,8 +349,8 @@ describe('GhostTwinPanel', () => {
     expect(passBadge).toHaveClass('rounded-badge', 'border-iron')
     expect(passDot).toHaveClass('bg-pulse-green')
     expect(passBadge.className).not.toMatch(/shadow-/)
-    expect(screen.getByText('Pure-Python calculation')).toBeInTheDocument()
-    expect(screen.getByText('Synthetic fair merit')).toBeInTheDocument()
+    expect(screen.getByText('Deterministic audit, no AI in the verdict')).toBeInTheDocument()
+    expect(screen.getByText('ReRoute fair screen')).toBeInTheDocument()
     expect(
       screen.getByRole('region', { name: 'Scrollable Ghost Twin results table' }),
     ).toHaveAttribute('tabindex', '0')
@@ -371,7 +363,7 @@ describe('GhostTwinPanel', () => {
     const toggle = chooseScoringMode('legacy')
 
     expect(toggle).toBeChecked()
-    expect(screen.getByText('Simulated legacy ATS')).toBeInTheDocument()
+    expect(screen.getByText('Legacy ATS screen')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
 
@@ -415,7 +407,7 @@ describe('GhostTwinPanel', () => {
     // The headline carries the same colour, and the max-delta figure does too:
     // the number that proves the bias must not share the colour of the run that
     // disproved it.
-    expect(screen.getByText('Fairness guardrail needs attention')).toHaveClass(
+    expect(screen.getByText('This screen charges her for who she is.')).toHaveClass(
       'text-flagged',
     )
     expect(screen.getByText('12')).toHaveClass('text-flagged')
@@ -791,7 +783,7 @@ describe('GhostTwinPanel', () => {
     expect(afterSecond[0]).toHaveTextContent('86')
     expect(afterSecond[1]).toHaveTextContent('86')
     expect(afterSecond[2]).toHaveTextContent('0')
-    expect(screen.getByText('Fairness guardrail passed')).toBeInTheDocument()
+    expect(screen.getByText('Her score does not move.')).toBeInTheDocument()
     expect(screen.getByText('Source=local')).toBeInTheDocument()
   })
 
@@ -823,10 +815,10 @@ describe('GhostTwinPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run Audit' }))
     await screen.findByText('PASS')
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Simulate Legacy ATS' }))
+    chooseScoringMode('legacy')
 
     expect(screen.getByText('Ready to audit')).toBeInTheDocument()
-    expect(screen.getByText('Simulated legacy ATS')).toBeInTheDocument()
+    expect(screen.getByText('Legacy ATS screen')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Gender')).toHaveValue('male')
   })

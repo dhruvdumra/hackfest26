@@ -73,12 +73,31 @@ class Settings(BaseSettings):
     # is considered stale, so a token cannot expire mid-request. Blank or unset
     # -> 30.0. Must be >= 0.
     genai_hub_token_expiry_margin_seconds: float = Field(default=30.0, ge=0)
+    # Market Intelligence reads its radar from SAP when USE_MOCK_MARKET=false:
+    # `hana` (default) is the MARKET_RADAR table on the HANA Cloud instance above,
+    # loaded by scripts/load_market_radar_hana.py; `datasphere` is a view exposed
+    # for consumption, read through a Datasphere database user (values below).
+    # USE_MOCK_MARKET=true, or a missing detail, keeps the bundled fixture.
+    use_mock_market: bool = True
+    market_provider: Literal["hana", "datasphere"] = "hana"
+    hana_market_table: str = "MARKET_RADAR"
+    datasphere_host: str = ""
+    datasphere_port: int = Field(default=443, ge=1, le=65535)
+    datasphere_user: str = ""
+    datasphere_password: SecretStr = SecretStr("")
+    datasphere_schema: str = ""
+    datasphere_view: str = ""
+    datasphere_timeout_seconds: float = Field(default=8.0, gt=0)
     hana_host: str = ""
     hana_port: int = Field(default=443, ge=1, le=65535)
     hana_user: str = ""
     hana_password: SecretStr = SecretStr("")
     hana_keep_alive_seconds: float = Field(default=600.0, gt=0)
     hana_query_timeout_seconds: float = Field(default=8.0, gt=0)
+    # How long the Two-Key step waits for Kavya's yes or no before it closes the
+    # run with nothing shared. Long on purpose: in the demo the consent click
+    # comes minutes after the pipeline finishes. Must be > 0.
+    consent_timeout_seconds: float = Field(default=600.0, gt=0)
 
 
 @lru_cache
@@ -90,6 +109,19 @@ def session_source(settings: Settings) -> SessionSource:
     if settings.use_mock_hana or settings.use_mock_genai:
         return "simulated"
     return "local"
+
+
+def datasphere_is_configured(settings: Settings) -> bool:
+    return all(
+        value.strip()
+        for value in (
+            settings.datasphere_host,
+            settings.datasphere_user,
+            settings.datasphere_password.get_secret_value(),
+            settings.datasphere_schema,
+            settings.datasphere_view,
+        )
+    )
 
 
 def hana_is_configured(settings: Settings) -> bool:
@@ -153,8 +185,7 @@ def resolve_genai_provider(settings: Settings) -> Literal["gemini", "compatible"
     if settings.gemini_api_key.get_secret_value().strip():
         return "gemini"
     if all(
-        value.strip()
-        for value in (settings.llm_base_url, settings.llm_api_key.get_secret_value())
+        value.strip() for value in (settings.llm_base_url, settings.llm_api_key.get_secret_value())
     ):
         return "compatible"
     return "sap"

@@ -1,0 +1,13 @@
+# Kept out of `cf push`. .env especially: on BTP, secrets come from cf set-env.
+.env
+.env.*
+.venv/
+data/
+tests/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+render.yaml
+Procfile

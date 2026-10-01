@@ -75,7 +75,7 @@ def test_counterfactuals_are_plausible_and_change_one_attribute() -> None:
     expected = {
         "career_gap": {"months": 0},
         "gender": "male",
-        "age": 30,
+        "age": 45,
         "college_tier": "tier_1",
         "city": "Bengaluru",
     }
@@ -92,6 +92,43 @@ def test_counterfactuals_are_plausible_and_change_one_attribute() -> None:
             for attribute, value in profile.items()
             if attribute != twin.attribute
         )
+
+
+@pytest.mark.parametrize(
+    ("age", "twin_age"),
+    [(18, 34), (29, 45), (39, 55), (40, 24), (60, 44), (100, 84)],
+)
+def test_age_twin_is_a_sixteen_year_swing_that_stays_a_valid_age(age: int, twin_age: int) -> None:
+    outcome = run_ghost_twin_audit({**valid_profile(), "age": age}, "role-42")
+    age_twin = next(twin for twin in outcome.twins if twin.attribute == "age")
+
+    assert age_twin.counterfactual_value == twin_age
+
+
+def test_kavya_legacy_screen_matches_the_pitch_deck() -> None:
+    """Slide 7 quotes these numbers; change the deck if this test has to change."""
+    kavya = {
+        "career_gap": "18 months",
+        "gender": "female",
+        "age": 29,
+        "college_tier": "tier_3",
+        "city": "Chennai",
+    }
+
+    legacy = run_ghost_twin_audit(
+        kavya, "quality-analyst", skill_score=86, simulate_legacy_ats=True
+    )
+
+    assert legacy.actual_score == 91
+    assert {twin.attribute: (twin.score, twin.delta) for twin in legacy.twins} == {
+        "career_gap": (97, 6),
+        "gender": (91, 0),
+        "age": (94, 3),
+        "college_tier": (94, 3),
+        "city": (95, 4),
+    }
+    assert legacy.max_delta == 6
+    assert legacy.result == "FLAGGED"
 
 
 def test_gender_is_a_protected_zero_effect_attribute() -> None:

@@ -23,6 +23,9 @@ _GENDER_TWINS = {
     "not_disclosed": "female",
 }
 _COLLEGE_TIER_TWINS = {"tier_1": "tier_2", "tier_2": "tier_1", "tier_3": "tier_2"}
+# Big enough to cross the legacy screen's 5-year age bands (29 -> 45), so an age
+# bias can actually show up; a one-year swap never could.
+_AGE_TWIN_SWING_YEARS = 16
 _ROLE_CITIES = ("Chennai", "Bengaluru", "Hyderabad", "Pune")
 _ROLE_TIERS = ("tier_1", "tier_2", "tier_3")
 
@@ -232,7 +235,11 @@ def _counterfactual_value(attribute: GhostTwinAttribute, original_value: object)
     if attribute == "gender":
         return _GENDER_TWINS[str(original_value)]
     if attribute == "age":
-        return 31 if original_value == 30 else 30
+        if not isinstance(original_value, int):
+            raise ValueError("age must be an integer")
+        if original_value < 40:
+            return original_value + _AGE_TWIN_SWING_YEARS
+        return original_value - _AGE_TWIN_SWING_YEARS
     if attribute == "college_tier":
         return _COLLEGE_TIER_TWINS[str(original_value)]
     city = str(original_value).casefold()

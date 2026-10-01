@@ -56,7 +56,7 @@ from app.domain.ghost_twin import GhostTwinOutcome, run_ghost_twin_audit
 from app.domain.passport import merge_skill_passport
 from app.mocks.employer_fixtures import employer_readiness_brief
 from app.mocks.hana_fixtures import SKILL_NODES
-from app.mocks.market_fixtures import DEFAULT_CITY, market_brief
+from app.mocks.market_fixtures import DEFAULT_CITY
 from app.models import (
     AgentEvent,
     AgentName,
@@ -75,7 +75,19 @@ from app.models import (
     SkillExtractionResponse,
     SkillPassport,
 )
-from app.services import employer_rewrite, genai_hub, inclusive_matching, learning_pathway
+from app.services import (
+    employer_rewrite,
+    genai_hub,
+    inclusive_matching,
+    learning_pathway,
+    market_radar,
+)
+from app.services.consent import (
+    CONSENT_STATE_KEY,
+    ConsentDecision,
+    await_consent,
+    pending_consent,
+)
 from app.storage.session_store import (
     SessionNotFoundError,
     SessionStore,
@@ -116,6 +128,12 @@ DEFAULT_TARGET_ROLE: Final[str] = "qa-analyst"
 DEFAULT_HOURS_PER_WEEK: Final[int] = 10
 FALLBACK_START_SKILL: Final[str] = "Manual testing"
 DEFAULT_SKILL_SCORE: Final[int] = 85
+TWO_KEYS: Final[tuple[str, ...]] = ("evidence_disclosure", "plan_acceptance")
+CONSENT_OUTCOME_MESSAGES: Final[dict[ConsentDecision, str]] = {
+    "accepted": "Kavya said yes · her Skill Passport is shared with employers",
+    "declined": "Kavya said no · her Skill Passport stays private",
+    "timed_out": "No answer from Kavya · nothing was shared",
+}
 
 _json_value_adapter: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
@@ -209,10 +227,8 @@ async def run_orchestration(
 
     The session must already exist in ``store``; a missing session is the one
     case that fails the run, and it does so with a terminal event rather than an
-    exception. The session is left ``completed`` when the terminal node runs,
-    which is the documented demo behaviour: ``two_key_wait`` emits
-    ``waiting_consent`` and then the final ``done`` event instead of parking the
-    session in a non-terminal ``waiting`` state.
+    exception. ``two_key_wait`` parks the session in ``waiting`` until Kavya
+    answers (or ``consent_timeout_seconds`` passes), then leaves it ``completed``.
     """
     emitter = EventEmitter(session_id=session.session_id, store=store, on_event=on_event)
     await emitter.hydrate()
@@ -365,17 +381,23 @@ async def _market_intelligence(state: OrchestrationState) -> OrchestrationState:
             data={"phase": "market_intelligence", "city": city},
             source="simulated",
         )
-        brief = market_brief(city)
+        brief = await market_radar.market_brief_async(city, state["settings"])
+        source_name = market_radar.source_name(brief)
+        live = source_name is not None
+        rows = f"radar rows from {source_name}" if live else "simulated radar rows"
         await _update_session(store, session_id, state_entry=("market_intelligence", brief))
         await emitter.emit(
             agent="MARKET INTELLIGENCE",
             status="done",
             message=(
-                f"{brief['entry_count']} simulated radar rows"
-                f" · {brief['openings']} openings in {brief['city']}"
+                f"{brief['entry_count']} {rows} · {brief['openings']} openings in {brief['city']}"
             ),
-            data={"phase": "market_intelligence", "source": "simulated", "brief": brief},
-            source="simulated",
+            data={
+                "phase": "market_intelligence",
+                "source": "live" if live else "simulated",
+                "brief": brief,
+            },
+            source="live" if live else "simulated",
         )
         return {**state, "market": brief}
     except Exception as error:
@@ -405,7 +427,7 @@ async def _learning_pathway(state: OrchestrationState) -> OrchestrationState:
         response = await asyncio.to_thread(
             learning_pathway.route,
             settings,
-            _route_start_skill(passport),
+            _route_start_skill(passport, target_role),
             target_role,
             hours_per_week,
         )
@@ -741,57 +763,55 @@ async def _bias_audit(state: OrchestrationState) -> OrchestrationState:
 
 
 async def _two_key_wait(state: OrchestrationState) -> OrchestrationState:
-    """The human sign-off step, and the terminal node of the demo run.
+    """The human sign-off step, and the terminal node of the run.
 
-    The PRD pauses here for a human decision. This build emits the
-    ``waiting_consent`` event and then immediately emits the terminal ``done``
-    event and sets ``status="completed"``, so the demo always ends instead of
-    hanging on a prompt. A real consent round trip belongs in front of this node
-    and would branch out of the graph here.
+    The session parks in ``waiting`` until Kavya answers through
+    ``POST /session/{id}/consent``. Nothing is shared without her yes: if no
+    answer arrives within ``consent_timeout_seconds`` the run closes as
+    ``timed_out`` with nothing shared, so a demo can never hang here.
     """
     emitter = state["emitter"]
     settings = state["settings"]
     store = state["store"]
     session_id = state["session_id"]
     source = session_source(settings)
+    timeout_seconds = settings.consent_timeout_seconds
     try:
-        await emitter.emit(
-            agent="ORCHESTRATOR",
-            status="waiting_consent",
-            message="Confirm the two keys: evidence disclosure and the re-routed plan",
-            data={
-                "phase": "two_key_wait",
-                "keys": ["evidence_disclosure", "plan_acceptance"],
-                "blocking": False,
-            },
-            source=source,
-        )
         await _update_session(
             store,
             session_id,
-            fields={"status": "completed"},
-            state_entry=(
-                "consent",
-                {
-                    "phase": "two_key_wait",
-                    "keys": ["evidence_disclosure", "plan_acceptance"],
-                    "state": "auto_accepted_for_demo",
-                    "blocking": False,
-                },
-            ),
+            fields={"status": "waiting"},
+            state_entry=(CONSENT_STATE_KEY, pending_consent(TWO_KEYS, timeout_seconds)),
         )
         await emitter.emit(
             agent="ORCHESTRATOR",
-            status="done",
-            message="Demo sign-off recorded · the re-routed plan is ready for review",
+            status="waiting_consent",
+            message="Waiting for Kavya: share her Skill Passport with employers?",
             data={
                 "phase": "two_key_wait",
-                "keys": ["evidence_disclosure", "plan_acceptance"],
+                "keys": list(TWO_KEYS),
+                "blocking": True,
+                "timeout_seconds": timeout_seconds,
+            },
+            source=source,
+        )
+        decision = await await_consent(store, session_id, timeout_seconds)
+        # The closing event lands before the status flips, so a client that sees
+        # ``completed`` always finds the outcome in the event history.
+        await emitter.emit(
+            agent="ORCHESTRATOR",
+            status="done",
+            message=CONSENT_OUTCOME_MESSAGES[decision],
+            data={
+                "phase": "two_key_wait",
+                "keys": list(TWO_KEYS),
+                "consent": decision,
                 "terminal": True,
                 "session_status": "completed",
             },
             source=source,
         )
+        await _update_session(store, session_id, fields={"status": "completed"})
     except Exception as error:
         return await _record_failure(state, "ORCHESTRATOR", error)
     return state
@@ -953,14 +973,28 @@ def _build_passport(
     return merge_skill_passport(session, response)
 
 
-def _route_start_skill(passport: SkillPassport | None) -> str:
+def _route_start_skill(passport: SkillPassport | None, target_role: str) -> str:
+    """Career GPS: start from the proven skill with the shortest bridge to the target.
+
+    Skills still awaiting proof are only considered when nothing is proven.
+    Ties go to the more confident claim, then to the passport's own order, so
+    the route no longer depends on the order an LLM happened to list skills in.
+    """
     canonical = {name.casefold(): name for _, name in SKILL_NODES}
-    if passport is not None:
-        for claim in passport.skills:
-            found = canonical.get(claim.name.casefold())
-            if found is not None:
-                return found
-    return FALLBACK_START_SKILL
+    if passport is None:
+        return FALLBACK_START_SKILL
+    claims = [claim for claim in passport.skills if claim.name.casefold() in canonical]
+    candidates = [claim for claim in claims if claim.verified] or claims
+    best: tuple[tuple[int, float, int], str] | None = None
+    for order, claim in enumerate(candidates):
+        name = canonical[claim.name.casefold()]
+        hours = learning_pathway.bridge_hours(name, target_role)
+        if hours is None:
+            continue
+        key = (hours, -claim.confidence, order)
+        if best is None or key < best[0]:
+            best = (key, name)
+    return best[1] if best is not None else FALLBACK_START_SKILL
 
 
 def _match_results(response: MatchResponse) -> list[MatchResult]:
@@ -981,7 +1015,7 @@ def _candidate_profile(city: str, skill_score: int) -> GhostTwinCandidateProfile
         career_gap=CareerGap(months=18),
         gender="female",
         age=29,
-        college_tier="tier_2",
+        college_tier="tier_3",
         city=city,
         skill_score=skill_score,
     )

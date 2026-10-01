@@ -48,9 +48,16 @@ export function createMockAgentAdapter(options = {}) {
 
 const defaultMockAdapter = createMockAgentAdapter()
 
+/**
+ * `enabled: false` subscribes to nothing and reports no events. The recorded
+ * run must never play on its own: a page that shows agents working before
+ * anyone pressed Run is telling the audience something that is not happening.
+ * A new `sessionId` restarts the stream from the first event.
+ */
 export function useAgentStream({
   adapter = defaultMockAdapter,
   sessionId = 'demo-session',
+  enabled = true,
 } = {}) {
   const source = getAgentStreamSource(adapter)
   const streamId = `${source}:${sessionId}`
@@ -62,9 +69,13 @@ export function useAgentStream({
     streamIdentity,
     events: EMPTY_EVENTS,
   }))
-  const stateIsCurrent = streamState.streamIdentity === streamIdentity
+  const stateIsCurrent = enabled && streamState.streamIdentity === streamIdentity
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined
+    }
+
     let active = true
     const unsubscribe = adapter.subscribe((event) => {
       if (!active) {
@@ -104,7 +115,7 @@ export function useAgentStream({
       active = false
       unsubscribe()
     }
-  }, [adapter, sessionId, streamId, streamIdentity])
+  }, [adapter, enabled, sessionId, streamId, streamIdentity])
 
   return {
     events: stateIsCurrent ? streamState.events : EMPTY_EVENTS,

@@ -21,7 +21,6 @@ import Field from './Field.jsx'
 import NumberInput from './NumberInput.jsx'
 import Select from './Select.jsx'
 import StatusBadge from './StatusBadge.jsx'
-import Switch from './Switch.jsx'
 import TextInput from './TextInput.jsx'
 
 export const AUDIT_TIMEOUT_MS = 10_000
@@ -101,7 +100,7 @@ const SOURCE_BADGE = {
 
 // The results table scrolls, so its region is focusable and needs a visible ring:
 // an Ash outline, the same shape the form controls use. Never a hue.
-const FOCUS_RING_CLASS = 'focus:outline-2 focus:outline-offset-2 focus:outline-ash'
+const FOCUS_RING_CLASS = 'focus:outline-2 focus:outline-offset-2 focus:outline-smoke'
 
 // Loading, failed and empty are one plain shape — centred copy inside the panel's
 // own padding, no box, no tint, no banner colour. Only the words differ; what
@@ -156,9 +155,15 @@ function formatScore(score) {
 }
 
 function getScoringMode(simulateLegacyAts) {
-  return simulateLegacyAts
-    ? 'Simulated legacy ATS'
-    : 'Synthetic fair merit'
+  return simulateLegacyAts ? 'Legacy ATS screen' : 'ReRoute fair screen'
+}
+
+/** The twin that moved furthest, which is the one the verdict sentence names. */
+function getTopTwin(twins) {
+  return twins.reduce(
+    (top, twin) => (top === null || Math.abs(twin.delta) > Math.abs(top.delta) ? twin : top),
+    null,
+  )
 }
 
 function isValidAuditResult(result) {
@@ -232,27 +237,21 @@ function getEditedFields(form) {
   return EDITABLE_FIELDS.filter((field) => form[field] !== INITIAL_FORM[field])
 }
 
-/* The demo opens on the biased screen, and that is a deliberate reversal of
- * the obvious default.
+/* The demo opens on ReRoute's fair screen, then flips to the legacy one.
  *
- * The fair screen is ReRoute's own merit model. It scores 86 with every twin
- * flat, which is the correct result and the least interesting one to watch: a
- * judge who presses Run Audit, sees PASS and max_delta 0, concludes the audit
- * found nothing, and moves on. The finding — that a legacy screen costs Kavya
- * six points for an 18-month break, three for her college, and four for her
- * city — is real, and it was one toggle away from where the audience lands.
- *
- * So the panel opens with the legacy screen selected. The verdict is amber, the
- * offending rows light up, and the same candidate, same score, same pure-Python
- * engine produces a FLAGGED. Toggling back to fair merit still shows a PASS,
- * which is the other half of the argument: the engine finds bias when there is
- * bias and stays flat when there is not.
- *
- * Nothing here is dressed up. The mode is named in the meta row
- * ("Simulated legacy ATS"), the switch label says what it is, and the audit is
- * the same pure-Python computation either way — the toggle changes which
- * scoring model builds the twins, not whether the audit runs. */
-const DEFAULT_SIMULATE_LEGACY_ATS = true
+ * The order is the argument: first the control (every twin scores the same,
+ * PASS), then the same Kavya on a typical legacy ATS screen, where removing
+ * her career gap moves the score six points and the audit freezes the
+ * decision. The verdict block states the finding in one sentence and one large
+ * number, so a judge at the back of the room reads it without the table.
+ * Either way the audit is the same deterministic computation; the choice only
+ * changes which scoring model builds the twins. */
+const DEFAULT_SIMULATE_LEGACY_ATS = false
+
+const SCREEN_OPTIONS = [
+  { value: 'fair', label: 'Fair screen' },
+  { value: 'legacy', label: 'Legacy ATS' },
+]
 
 export default function GhostTwinPanel({ baseUrl = '' }) {
   const [simulateLegacyAts, setSimulateLegacyAts] = useState(DEFAULT_SIMULATE_LEGACY_ATS)
@@ -273,8 +272,8 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
     }
   }, [])
 
-  function handleToggleChange(event) {
-    setSimulateLegacyAts(event.target.checked)
+  function handleScreenChange(event) {
+    setSimulateLegacyAts(event.target.value === 'legacy')
     setAudit(EMPTY_AUDIT)
     setHasAudit(false)
     setError('')
@@ -364,6 +363,17 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
    * channel alone. */
   const verdictLabel = isPass ? 'PASS' : 'FLAGGED'
   const verdictTone = isPass ? 'accent' : 'flagged'
+  const topTwin = getTopTwin(twins)
+  const verdictSentence =
+    isFlagged && topTwin !== null
+      ? `Change only her ${getTwinLabel(topTwin).toLowerCase()} (${formatCounterfactualValue(
+          topTwin.original_value,
+        )} → ${formatCounterfactualValue(topTwin.counterfactual_value)}) and this screen scores her twin ${formatSignedDelta(
+          topTwin.delta,
+        )}. The limit is ${formatScore(audit.threshold)}.`
+      : `Change her career gap, gender, age, college or city and she still scores ${formatScore(
+          audit.actual_score,
+        )}. The limit is ${formatScore(audit.threshold)}.`
 
   return (
     <Card
@@ -410,26 +420,41 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
       </div>
 
       <div className={`${BLEED_BLOCK_CLASS} mt-8 flex flex-col items-start gap-4 border-t ${ruleClass} pt-8 sm:flex-row sm:items-center sm:justify-between`}>
-        {/* The nav bar's minimal switch: Graphite outline off, Chalk outline on,
-            state carried by the knob's position. A toggle is never a status
-            light, so no Pulse Green here either. */}
-        <Switch
-          id="simulate-legacy-ats"
-          checked={simulateLegacyAts}
-          onChange={handleToggleChange}
-          disabled={isLoading}
-          label="Simulate Legacy ATS"
-          /* Reads as a mode selector, not an opt-in, because that is what it now
-           * is. "Add a comparison run" was written when the fair screen was the
-           * default and the legacy run was something you turned on; with the
-           * legacy screen selected on arrival, the copy has to say which screen
-           * is running and what the other one would show. */
-          description={
-            simulateLegacyAts
-              ? 'Scoring against a legacy, biased screening model. Turn this off to run the same audit against ReRoute’s fair-merit model.'
-              : 'Scoring against ReRoute’s fair-merit model. Turn this on to run the same audit against a legacy, biased screen.'
-          }
-        />
+        {/* Which screen scores the twins: two named choices, big enough to hit
+            and read from across the room. The selected one takes Chalk; a
+            choice is never a status light, so no accent colour here. */}
+        <fieldset disabled={isLoading} className="min-w-0">
+          <legend className={sectionHeadingClass}>Screen to audit</legend>
+          <div className="mt-3 inline-flex rounded-full border border-iron p-1">
+            {SCREEN_OPTIONS.map((option) => {
+              const selected = (option.value === 'legacy') === simulateLegacyAts
+
+              return (
+                <label
+                  key={option.value}
+                  className={`cursor-pointer rounded-full px-5 py-2.5 font-aeonik text-body leading-none transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-smoke ${
+                    selected ? 'bg-chalk text-obsidian' : 'text-smoke hover:text-chalk'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="ghost-twin-screen"
+                    value={option.value}
+                    checked={selected}
+                    onChange={handleScreenChange}
+                    className="sr-only"
+                  />
+                  {option.label}
+                </label>
+              )
+            })}
+          </div>
+          <p className={`mt-3 ${bodyCopyClass}`}>
+            {simulateLegacyAts
+              ? 'A typical legacy ATS: it rewards age, city and pedigree. Run it and see what it charges Kavya.'
+              : 'ReRoute’s fair screen scores proven skills only. Run it first, then switch to Legacy ATS.'}
+          </p>
+        </fieldset>
         {/* The one filled surface on this screen. */}
         <Button
           variant="glossy"
@@ -566,11 +591,15 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
       </fieldset>
 
       <div className={`${BLEED_BLOCK_CLASS} mt-8 border-t ${ruleClass} pt-8 ${metaRowClass}`} aria-live="polite">
-        <span>{hasAudit ? `Source=${source}` : 'Source=pending'}</span>
-        <span aria-hidden="true">·</span>
+        {hasAudit ? (
+          <>
+            <span>{`Source=${source}`}</span>
+            <span aria-hidden="true">·</span>
+          </>
+        ) : null}
         <span>{scoringMode}</span>
         <span aria-hidden="true">·</span>
-        <span>Pure-Python calculation</span>
+        <span>Deterministic audit, no AI in the verdict</span>
       </div>
 
       {isLoading ? (
@@ -601,12 +630,40 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
           <p className={sectionHeadingClass}>Ready to audit</p>
           <p className={STATE_COPY_CLASS}>
             {simulateLegacyAts
-              ? 'Run the audit against the legacy screen. Every counterfactual below will move, and the verdict goes amber where the movement exceeds the threshold.'
-              : 'Run the audit to see how each counterfactual changes the base score. The server decides the fairness threshold.'}
+              ? 'Run the audit against the legacy screen. The twins will move, and the verdict turns amber where a move passes the limit.'
+              : 'Run the audit on ReRoute’s fair screen first. Every twin should score the same.'}
           </p>
         </div>
       ) : (
         <div className="mt-12 space-y-16">
+          {isPass || isFlagged ? (
+            <div
+              className={`${BLEED_BLOCK_CLASS} flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-10`}
+              role="status"
+              aria-live="polite"
+            >
+              {/* The finding as one number, readable from the back of the room:
+                  the twin that moved furthest, in the verdict's colour. */}
+              <p
+                className={`font-aeonik text-[4.5rem] font-normal leading-none tracking-display ${
+                  isFlagged ? 'text-flagged' : 'text-pulse-green'
+                }`}
+                data-testid="verdict-delta"
+              >
+                {isFlagged && topTwin !== null ? formatSignedDelta(topTwin.delta) : '0'}
+              </p>
+              <div>
+                <StatusBadge label={verdictLabel} tone={verdictTone} />
+                <p className={`mt-3 ${headingSmClass} ${isPass ? chalkClass : 'text-flagged'}`}>
+                  {isPass ? 'Her score does not move.' : 'This screen charges her for who she is.'}
+                </p>
+                <p className={`mt-2 ${bodyCopyClass}`} data-testid="verdict-sentence">
+                  {verdictSentence}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
             <div className={`${BLEED_BLOCK_CLASS} border-t ${ruleClass} pt-4`}>
               <p className={dataLabelClass}>Actual score</p>
@@ -743,37 +800,6 @@ export default function GhostTwinPanel({ baseUrl = '' }) {
               </tbody>
             </table>
           </div>
-
-          {isPass || isFlagged ? (
-            <div
-              className={`${BLEED_BLOCK_CLASS} flex flex-col gap-4 border-t ${ruleClass} pt-8 sm:flex-row sm:items-start sm:justify-between`}
-              role="status"
-              aria-live="polite"
-            >
-              <div>
-                {/* The verdict takes the badge's explicit tone rather than its
-                    liveness flag, so a FLAGGED result is amber and a PASS is
-                    emerald. The sentence below carries the meaning, so the
-                    badge only has to name the state — but it now also *shows*
-                    it, which is the whole point of the audit. */}
-                <StatusBadge label={verdictLabel} tone={verdictTone} />
-                <p
-                  className={`mt-3 ${headingSmClass} ${
-                    isPass ? chalkClass : 'text-flagged'
-                  }`}
-                >
-                  {isPass
-                    ? 'Fairness guardrail passed'
-                    : 'Fairness guardrail needs attention'}
-                </p>
-              </div>
-              <p className={bodyCopyClass}>
-                {isPass
-                  ? 'The observed score difference stays within the server threshold.'
-                  : 'A counterfactual score difference exceeds the server threshold.'}
-              </p>
-            </div>
-          ) : null}
         </div>
       )}
       </div>

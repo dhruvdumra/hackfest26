@@ -145,7 +145,7 @@ export const cellRuleClass = 'border-x border-b border-graphite'
  *  hue. The focus ring is applied through :focus-visible only, so a mouse click
  *  does not leave a ring behind but a keyboard tab does. */
 export const controlBaseClass =
-  'w-full rounded-[6px] border border-graphite bg-carbon px-3 text-body leading-body text-chalk placeholder:text-smoke transition-colors hover:border-iron focus:border-ash focus-visible:border-ash focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ash disabled:opacity-50'
+  'w-full rounded-[6px] border border-graphite bg-carbon px-3 text-body leading-body text-chalk placeholder:text-smoke transition-colors hover:border-iron focus:border-ash focus-visible:border-ash focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smoke disabled:opacity-50'
 
 /** Every control is exactly 44px tall. One height for every field on the page
  *  is what makes a form read as a form; a select that is 40px next to a text
@@ -183,7 +183,7 @@ export const buttonGhostClass =
 export const buttonHeightClass = 'h-11'
 
 export const buttonBaseClass =
-  'inline-flex shrink-0 items-center gap-2 whitespace-nowrap font-aeonik text-sm font-normal uppercase leading-none tracking-button transition-[background-color,filter,border-color,color] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ash'
+  'inline-flex shrink-0 items-center gap-2 whitespace-nowrap font-aeonik text-sm font-normal uppercase leading-none tracking-button transition-[background-color,filter,border-color,color] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-smoke'
 
 /* ── Status ───────────────────────────────────────────────────────────── */
 
@@ -210,3 +210,6 @@ export const iconChalkClass = 'text-chalk'
 
 export const iconStrokeClass =
   'shrink-0 fill-none stroke-current stroke-[1.5px] stroke-linecap-round stroke-linejoin-round'
+
+/** An aside the reader must not skip: a hairline above it, caption Smoke below. */
+export const noteClass = `max-w-[40rem] border-t ${ruleClass} pt-6 text-left font-aeonik text-caption font-normal leading-6 ${smokeClass}`

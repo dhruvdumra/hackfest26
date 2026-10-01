@@ -1,0 +1,19 @@
+# SAP BTP Cloud Foundry manifest for the ReRoute frontend: the Vite build,
+# served by the staticfile buildpack. Build first, with the backend's route baked
+# in and demo mode off by default, then push from frontend/:
+#
+#   $env:VITE_API_BASE_URL = "https://<backend-route>"
+#   $env:VITE_DEMO_MODE_DEFAULT = "false"
+#   npm run build
+#   cf push
+#
+# See docs/BTP_DEPLOY.md.
+applications:
+  - name: reroute-frontend
+    memory: 64M
+    disk_quota: 256M
+    instances: 1
+    random-route: true
+    buildpacks:
+      - staticfile_buildpack
+    path: dist

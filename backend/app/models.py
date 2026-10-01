@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool, model_validator
 
 InputType = Literal["voice", "text"]
 SessionStatus = Literal["started", "running", "waiting", "completed", "failed"]
@@ -159,6 +159,29 @@ class SessionStartResponse(APIModel):
     status: Literal["started"] = "started"
 
 
+class EmployerDecisionRequest(APIModel):
+    approved: StrictBool
+
+
+class EmployerDecision(APIModel):
+    job_post_id: str
+    decision: Literal["approved", "rejected"]
+    message: str
+    decided_at: str
+    # Recorded by this backend, not by an ATS or an SAP service.
+    source: Literal["local"] = "local"
+
+
+class ConsentRequest(APIModel):
+    accepted: StrictBool
+
+
+class ConsentResponse(APIModel):
+    session_id: str
+    consent: Literal["accepted", "declined"]
+    decided_at: str
+
+
 class RouteRequest(APIModel):
     from_skill: str = Field(min_length=1)
     target_role: str = Field(min_length=1)
@@ -303,9 +326,14 @@ class IntegrationModeStatus(APIModel):
     mode: Literal["mock", "live"]
     source: DataSource
     integration_status: IntegrationStatus = "not_implemented"
+    # Which service answers a live call, when it is not the documented
+    # default: the GenAI gateway ("gemini", "openrouter", ...) so a model
+    # answer is never read as SAP AI Core, or "sap_datasphere" for the market.
+    provider: str | None = None
 
 
 class HealthResponse(APIModel):
     status: Literal["ok"]
     hana: IntegrationModeStatus
     genai: IntegrationModeStatus
+    market: IntegrationModeStatus

@@ -8,27 +8,20 @@ import {
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import HRConsole from './HRConsole.jsx'
-import { getDisplacementRadar, rewriteEmployerFilter } from '../api.js'
+import {
+  decideEmployerRewrite,
+  getEmployerDecision,
+  rewriteEmployerFilter,
+} from '../api.js'
 
 vi.mock('../api.js', () => ({
-  getDisplacementRadar: vi.fn(),
+  decideEmployerRewrite: vi.fn(),
+  getEmployerDecision: vi.fn(),
   rewriteEmployerFilter: vi.fn(),
 }))
 
-const RADAR_DISCLAIMER =
-  'Illustrative displacement and demand figures bundled with the demo, not observed job-board data.'
-
 const REWRITE_DISCLAIMER =
   'Illustrative employer job posts bundled with the demo, not observed hiring data.'
-
-const RADAR_ROW = {
-  role: 'qa-analyst',
-  city: 'Chennai',
-  exposure: 'low',
-  demand: 'growing',
-  source: 'simulated',
-  disclaimer: RADAR_DISCLAIMER,
-}
 
 const REWRITE_ROW = {
   job_post_id: 'post-chennai-qa-analyst-118',
@@ -63,12 +56,140 @@ function deferred() {
   return { promise, resolve: settle }
 }
 
-const radarMock = vi.mocked(getDisplacementRadar)
 const rewriteMock = vi.mocked(rewriteEmployerFilter)
+const decisionMock = vi.mocked(decideEmployerRewrite)
+const latestDecisionMock = vi.mocked(getEmployerDecision)
+
+describe('HRConsole hiring-manager sign-off', () => {
+  beforeEach(() => {
+    rewriteMock.mockReset()
+    decisionMock.mockReset()
+    latestDecisionMock.mockReset()
+    rewriteMock.mockResolvedValue(REWRITE_ROW)
+    latestDecisionMock.mockRejectedValue(Object.assign(new Error('none yet'), { status: 404 }))
+  })
+
+  it('shows a decision made earlier, such as in SAP Build Apps, and still asks again', async () => {
+    latestDecisionMock.mockResolvedValue({
+      job_post_id: 'post-chennai-qa-analyst-118',
+      decision: 'approved',
+      message: 'Published by hiring manager',
+      decided_at: '2026-09-30T05:00:00+00:00',
+    })
+    render(<HRConsole baseUrl="http://api" />)
+
+    // The earlier decision annotates the buttons instead of replacing them, so
+    // a rehearsal approval never leaves the live demo with nothing to click.
+    expect(await screen.findByTestId('rewrite-prior-decision')).toHaveTextContent(
+      'Last recorded decision=approved',
+    )
+    expect(screen.getByRole('button', { name: 'Approve and publish' })).toBeEnabled()
+    expect(latestDecisionMock).toHaveBeenCalledWith('post-chennai-qa-analyst-118', {
+      baseUrl: 'http://api',
+      signal: expect.any(AbortSignal),
+    })
+  })
+
+  it('still asks for sign-off when there is no decision yet', async () => {
+    render(<HRConsole />)
+    await screen.findByTestId('hidden-talent-count')
+
+    await waitFor(() => expect(latestDecisionMock).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: 'Approve and publish' })).toBeEnabled()
+    expect(screen.queryByTestId('rewrite-decision-error')).toBeNull()
+  })
+
+  it('asks the hiring manager to approve or reject the rewrite', async () => {
+    render(<HRConsole />)
+
+    await screen.findByTestId('hidden-talent-count')
+
+    expect(screen.getByRole('button', { name: 'Approve and publish' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled()
+  })
+
+  it('publishes the rewrite on approval', async () => {
+    decisionMock.mockResolvedValue({
+      job_post_id: 'post-chennai-qa-analyst-118',
+      decision: 'approved',
+      message: 'Published by hiring manager',
+      decided_at: '2026-09-30T05:00:00+00:00',
+    })
+    render(<HRConsole baseUrl="http://api" />)
+    await screen.findByTestId('hidden-talent-count')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and publish' }))
+
+    expect(await screen.findByTestId('rewrite-decision')).toHaveTextContent(
+      'Published by hiring manager',
+    )
+    expect(decisionMock).toHaveBeenCalledWith('post-chennai-qa-analyst-118', true, {
+      baseUrl: 'http://api',
+    })
+    expect(screen.queryByRole('button', { name: 'Approve and publish' })).toBeNull()
+  })
+
+  it('records a rejection', async () => {
+    decisionMock.mockResolvedValue({
+      job_post_id: 'post-chennai-qa-analyst-118',
+      decision: 'rejected',
+      message: 'Rejected by hiring manager · the rewrite is not published',
+      decided_at: '2026-09-30T05:00:00+00:00',
+    })
+    render(<HRConsole />)
+    await screen.findByTestId('hidden-talent-count')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+
+    expect(await screen.findByTestId('rewrite-decision')).toHaveTextContent(
+      'Rejected by hiring manager',
+    )
+    expect(decisionMock).toHaveBeenCalledWith('post-chennai-qa-analyst-118', false, {
+      baseUrl: '',
+    })
+  })
+
+  it('lets the hiring manager decide again after a decision', async () => {
+    decisionMock.mockResolvedValue({
+      job_post_id: 'post-chennai-qa-analyst-118',
+      decision: 'approved',
+      message: 'Published by hiring manager',
+      decided_at: '2026-09-30T05:00:00+00:00',
+    })
+    render(<HRConsole />)
+    await screen.findByTestId('hidden-talent-count')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and publish' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Decide again' }))
+
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeEnabled()
+    expect(screen.getByTestId('rewrite-prior-decision')).toHaveTextContent(
+      'Last recorded decision=approved',
+    )
+  })
+
+  it('keeps the buttons when the decision could not be recorded', async () => {
+    decisionMock.mockRejectedValue(new Error('network down'))
+    render(<HRConsole />)
+    await screen.findByTestId('hidden-talent-count')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and publish' }))
+
+    expect(await screen.findByTestId('rewrite-decision-error')).toHaveTextContent('network down')
+    expect(screen.getByRole('button', { name: 'Approve and publish' })).toBeEnabled()
+  })
+
+  it('does not ask for sign-off when the post hid nobody', async () => {
+    rewriteMock.mockResolvedValue({ ...REWRITE_ROW, hidden_talent_count: 0 })
+    render(<HRConsole />)
+    await screen.findByTestId('hidden-talent-count')
+
+    expect(screen.queryByRole('button', { name: 'Approve and publish' })).toBeNull()
+  })
+})
 
 describe('HRConsole', () => {
   beforeEach(() => {
-    radarMock.mockReset()
     rewriteMock.mockReset()
   })
 
@@ -76,102 +197,65 @@ describe('HRConsole', () => {
     vi.restoreAllMocks()
   })
 
-  it('loads the default radar row and rewrite on mount', async () => {
-    radarMock.mockResolvedValue(RADAR_ROW)
+  it('loads the default rewrite on mount', async () => {
     rewriteMock.mockResolvedValue(REWRITE_ROW)
 
     render(<HRConsole />)
 
     await waitFor(() =>
-      expect(radarMock).toHaveBeenCalledWith(
-        { role: 'qa-analyst', city: 'Chennai' },
-        { baseUrl: '', signal: expect.any(AbortSignal) },
-      ),
+      expect(rewriteMock).toHaveBeenCalledWith('post-chennai-qa-analyst-118', {
+        baseUrl: '',
+        signal: expect.any(AbortSignal),
+      }),
     )
-    expect(rewriteMock).toHaveBeenCalledWith(
-      'post-chennai-qa-analyst-118',
-      { baseUrl: '', signal: expect.any(AbortSignal) },
-    )
-
-    expect(await screen.findByTestId('radar-exposure')).toHaveTextContent('low')
-    expect(screen.getByTestId('radar-demand')).toHaveTextContent('growing')
-    expect(screen.getByTestId('hidden-talent-count')).toHaveTextContent('12')
+    expect(await screen.findByTestId('hidden-talent-count')).toHaveTextContent('12')
   })
 
-  it('marks every data block with a Status Badge and never a live one', async () => {
-    radarMock.mockResolvedValue(RADAR_ROW)
+  it('marks the rewrite with a Status Badge and never a live one', async () => {
     rewriteMock.mockResolvedValue(REWRITE_ROW)
 
     const { container } = render(<HRConsole />)
-
-    await screen.findByTestId('radar-exposure')
     await screen.findByTestId('hidden-talent-count')
 
-    // Each block header carries the reference's full-pill Status Badge. Both
-    // endpoints serve bundled fixtures, so both are non-live: the untinted Iron
-    // outline dot, never the accent live dot. (Iron, not the R1 Graphite — the
-    // old value sat 1.18:1 against this badge's own surface, so the dot was
-    // invisible inside its own pill.)
-    const badges = screen.getAllByText('simulated')
-    expect(badges).toHaveLength(2)
-    badges.forEach((word) => {
-      const badge = word.closest('span.rounded-badge')
-      expect(badge).not.toBeNull()
-      expect(badge).toHaveClass('border-iron')
-    })
-    expect(container.querySelectorAll('[data-status-dot]')).toHaveLength(2)
+    // The rewrite serves bundled sample posts, so its badge is the untinted
+    // Iron outline, never the accent live dot.
+    expect(screen.getByText('simulated').closest('span.rounded-badge')).toHaveClass('border-iron')
+    expect(container.querySelectorAll('[data-status-dot]')).toHaveLength(1)
     container.querySelectorAll('[data-status-dot]').forEach((dot) => {
-      expect(dot).toHaveClass('border-iron')
       expect(dot).not.toHaveClass('bg-pulse-green')
     })
-
-    expect(screen.getAllByText('source=simulated')).toHaveLength(2)
+    expect(screen.getAllByText('source=simulated')).toHaveLength(1)
     expect(container.textContent).not.toMatch(LIVE_PATTERN)
-    expect(screen.queryByText('live')).not.toBeInTheDocument()
   })
 
-  it('shows the backend disclaimer for both blocks', async () => {
-    radarMock.mockResolvedValue(RADAR_ROW)
+  it('shows the rewrite disclaimer and says which data is sample data', async () => {
     rewriteMock.mockResolvedValue(REWRITE_ROW)
 
     render(<HRConsole />)
 
-    expect(await screen.findByText(RADAR_DISCLAIMER)).toBeInTheDocument()
-    expect(screen.getByText(REWRITE_DISCLAIMER)).toBeInTheDocument()
-    expect(
-      screen.getByText('Displacement radar:', { exact: false }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('Job post rewrite:', { exact: false }),
-    ).toBeInTheDocument()
+    expect(await screen.findByText(REWRITE_DISCLAIMER)).toBeInTheDocument()
+    expect(screen.getByText('Job post rewrite:', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText(/hidden-talent counts here are sample data/)).toBeInTheDocument()
   })
 
   it('renders the before and after filter text with the restrictive phrase', async () => {
-    radarMock.mockResolvedValue(RADAR_ROW)
     rewriteMock.mockResolvedValue(REWRITE_ROW)
 
     render(<HRConsole />)
 
-    const before = await screen.findByRole('heading', {
-      name: 'Before · would be flagged',
-    })
+    const before = await screen.findByRole('heading', { name: 'Before · would be flagged' })
     const after = screen.getByRole('heading', { name: 'After · rewritten post' })
 
-    expect(before).toBeInTheDocument()
-    expect(after).toBeInTheDocument()
     expect(before.parentElement).toHaveTextContent(REWRITE_ROW.filter_text_before)
     expect(after.parentElement).toHaveTextContent(REWRITE_ROW.filter_text_after)
     expect(screen.getByTestId('restrictive-phrase')).toHaveTextContent(
       REWRITE_ROW.restrictive_phrase,
     )
     expect(screen.getByText('Restrictive phrase removed')).toBeInTheDocument()
-    expect(screen.getByTestId('rewrite-reason')).toHaveTextContent(
-      REWRITE_ROW.rewrite_reason,
-    )
+    expect(screen.getByTestId('rewrite-reason')).toHaveTextContent(REWRITE_ROW.rewrite_reason)
   })
 
   it('lists every removed criterion', async () => {
-    radarMock.mockResolvedValue(RADAR_ROW)
     rewriteMock.mockResolvedValue(REWRITE_ROW)
 
     render(<HRConsole />)
@@ -179,58 +263,16 @@ describe('HRConsole', () => {
     const list = await screen.findByRole('list', {
       name: `Criteria removed (${REWRITE_ROW.removed_criteria.length})`,
     })
-    const items = within(list).getAllByRole('listitem')
 
-    expect(items).toHaveLength(REWRITE_ROW.removed_criteria.length)
+    expect(within(list).getAllByRole('listitem')).toHaveLength(
+      REWRITE_ROW.removed_criteria.length,
+    )
     REWRITE_ROW.removed_criteria.forEach((criterion) => {
       expect(within(list).getByText(criterion)).toBeInTheDocument()
     })
   })
 
-  it('re-requests the radar for an edited role id', async () => {
-    radarMock.mockResolvedValue(RADAR_ROW)
-    rewriteMock.mockResolvedValue(REWRITE_ROW)
-
-    render(<HRConsole />)
-    await screen.findByTestId('radar-exposure')
-
-    fireEvent.change(screen.getByLabelText('Role id'), {
-      target: { value: 'support-operations-lead' },
-    })
-    fireEvent.change(screen.getByLabelText('City'), {
-      target: { value: 'Bengaluru' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Check exposure' }))
-
-    await waitFor(() =>
-      expect(radarMock).toHaveBeenLastCalledWith(
-        { role: 'support-operations-lead', city: 'Bengaluru' },
-        { baseUrl: '', signal: expect.any(AbortSignal) },
-      ),
-    )
-  })
-
-  it('surfaces a visible error when the radar 404s', async () => {
-    radarMock.mockRejectedValue(
-      new Error(
-        "no simulated radar entry for role 'ghost-role' in 'Chennai'; expected one of: qa-analyst",
-      ),
-    )
-    rewriteMock.mockResolvedValue(REWRITE_ROW)
-
-    render(<HRConsole />)
-
-    const error = await screen.findByTestId('radar-error')
-
-    expect(error).toHaveAttribute('role', 'alert')
-    expect(error).toHaveTextContent('Radar unavailable')
-    expect(error).toHaveTextContent('no simulated radar entry')
-    expect(screen.queryByTestId('radar-exposure')).not.toBeInTheDocument()
-    expect(screen.getByTestId('rewrite-region')).toHaveAttribute('aria-live')
-  })
-
   it('surfaces a visible error when the employer post id is unknown', async () => {
-    radarMock.mockResolvedValue(RADAR_ROW)
     rewriteMock.mockRejectedValue(
       new Error('unknown job_post_id; expected one of: post-chennai-qa-analyst-118'),
     )
@@ -244,42 +286,28 @@ describe('HRConsole', () => {
     expect(screen.queryByTestId('hidden-talent-count')).not.toBeInTheDocument()
   })
 
-  it('shows a loading state for each block while a request is in flight', async () => {
-    const radarPending = deferred()
+  it('shows a loading state while the rewrite is in flight', async () => {
     const rewritePending = deferred()
-
-    radarMock.mockReturnValue(radarPending.promise)
     rewriteMock.mockReturnValue(rewritePending.promise)
 
     render(<HRConsole />)
 
-    expect(await screen.findByTestId('radar-loading')).toHaveTextContent(
-      'Loading radar…',
-    )
-    expect(screen.getByTestId('rewrite-loading')).toHaveTextContent(
+    expect(await screen.findByTestId('rewrite-loading')).toHaveTextContent(
       'Rewriting the filter…',
     )
-    expect(
-      screen.getByRole('button', { name: 'Loading radar…' }),
-    ).toBeDisabled()
-    expect(
-      screen.getByRole('button', { name: 'Rewriting…' }),
-    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Rewriting…' })).toBeDisabled()
 
     await act(async () => {
-      radarPending.resolve(RADAR_ROW)
       rewritePending.resolve(REWRITE_ROW)
     })
 
     await waitFor(() =>
-      expect(screen.queryByTestId('radar-loading')).not.toBeInTheDocument(),
+      expect(screen.queryByTestId('rewrite-loading')).not.toBeInTheDocument(),
     )
-    expect(screen.queryByTestId('rewrite-loading')).not.toBeInTheDocument()
     expect(screen.getByTestId('hidden-talent-count')).toHaveTextContent('12')
   })
 
   it('falls back to an empty rewrite block when the fixture is empty', async () => {
-    radarMock.mockRejectedValue(new Error('radar offline'))
     rewriteMock.mockResolvedValue({
       ...REWRITE_ROW,
       hidden_talent_count: 0,
@@ -292,34 +320,22 @@ describe('HRConsole', () => {
 
     await screen.findByTestId('hidden-talent-count')
     expect(screen.getByTestId('hidden-talent-count')).toHaveTextContent('0')
-    expect(
-      screen.getByText('No criteria were removed from this post.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('No criteria were removed from this post.')).toBeInTheDocument()
     expect(screen.getByText('No after text supplied.')).toBeInTheDocument()
-    expect(screen.getByTestId('restrictive-phrase')).toHaveTextContent(
-      'no phrase reported',
-    )
+    expect(screen.getByTestId('restrictive-phrase')).toHaveTextContent('no phrase reported')
   })
 
-  it('shows an empty state when a block resolves without data', async () => {
-    radarMock.mockResolvedValue(undefined)
+  it('shows an empty state when the rewrite resolves without data', async () => {
     rewriteMock.mockResolvedValue(undefined)
 
     render(<HRConsole />)
 
-    expect(await screen.findByTestId('radar-empty')).toHaveTextContent(
-      'No radar row yet',
-    )
-    expect(screen.getByTestId('rewrite-empty')).toHaveTextContent(
-      'No rewrite yet',
-    )
-    expect(screen.queryByTestId('radar-exposure')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('rewrite-empty')).toHaveTextContent('No rewrite yet')
     expect(screen.queryByTestId('hidden-talent-count')).not.toBeInTheDocument()
-    expect(screen.getAllByText('simulated')).toHaveLength(2)
+    expect(screen.getAllByText('simulated')).toHaveLength(1)
   })
 
-  it('offers every bundled job post id and labels the disclaimer note', async () => {
-    radarMock.mockResolvedValue(RADAR_ROW)
+  it('offers every bundled job post id and re-requests the chosen one', async () => {
     rewriteMock.mockResolvedValue(REWRITE_ROW)
 
     render(<HRConsole />)
@@ -334,21 +350,15 @@ describe('HRConsole', () => {
     ])
 
     await act(async () => {
-      fireEvent.change(select, {
-        target: { value: 'post-chennai-data-quality-311' },
-      })
+      fireEvent.change(select, { target: { value: 'post-chennai-data-quality-311' } })
     })
     fireEvent.click(screen.getByRole('button', { name: 'Rewrite this post' }))
 
     await waitFor(() =>
-      expect(rewriteMock).toHaveBeenLastCalledWith(
-        'post-chennai-data-quality-311',
-        { baseUrl: '', signal: expect.any(AbortSignal) },
-      ),
+      expect(rewriteMock).toHaveBeenLastCalledWith('post-chennai-data-quality-311', {
+        baseUrl: '',
+        signal: expect.any(AbortSignal),
+      }),
     )
-
-    expect(
-      screen.getByText(/wired to no applicant tracking system/, { exact: false }),
-    ).toBeInTheDocument()
   })
 })

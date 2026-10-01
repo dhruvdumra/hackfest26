@@ -28,6 +28,23 @@ const NOOP_SOCKET_HANDLE = {
   close: (_code, _reason) => false,
 }
 
+const CONSENT_ANSWERS = new Set(['accepted', 'declined', 'timed_out'])
+
+/**
+ * The orchestrator's last word on a run: it closes with a `done` carrying
+ * Kavya's consent answer, or with `failed: true`. Nothing follows either, so
+ * the stream has no reason to reconnect afterwards.
+ */
+function isFinalEvent(event) {
+  if (!isRecord(event) || event.agent !== 'ORCHESTRATOR' || event.status !== 'done') {
+    return false
+  }
+
+  const data = isRecord(event.data) ? event.data : {}
+
+  return CONSENT_ANSWERS.has(data.consent) || data.failed === true
+}
+
 function isSessionNotFound(event) {
   return isRecord(event) && event.code === SESSION_NOT_FOUND_CLOSE_CODE
 }
@@ -138,6 +155,7 @@ export function useSessionStream(options) {
     const streamId = `session:${resolvedSessionId}`
     const seenEventKeys = new Set()
     let disposed = false
+    let finished = false
     let attempts = 0
     let events = EMPTY_EVENTS
     let lastEventId = 0
@@ -203,11 +221,24 @@ export function useSessionStream(options) {
         ...events,
         { ...normalizedEvent, source: readEventSource(rawEvent) },
       ]
+      finished = finished || isFinalEvent(rawEvent)
       publish(OPEN_STATUS)
     }
 
     function scheduleReconnect() {
-      if (disposed) {
+      // One pending reconnect at a time: an `onerror` is usually followed by
+      // an `onclose` from the same socket, and each used to schedule its own
+      // reconnect, doubling the open sockets on every blip.
+      if (disposed || reconnectTimer) {
+        return
+      }
+
+      // Drop the failed socket before opening another, so its late close
+      // cannot report in again.
+      socketHandle.close()
+
+      if (finished) {
+        publish(CLOSED_STATUS)
         return
       }
 

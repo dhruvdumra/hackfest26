@@ -44,9 +44,9 @@ const RAIL_SHORT_LABELS = {
 }
 
 // A run is one line per event, so an unbounded list would grow the hero without
-// limit. Ten rows is about what fits the column on a laptop, and the header
-// count still reports the true total, so nothing is silently dropped.
-const VISIBLE_EVENTS = 10
+// limit. Rows now wrap at a size a projector audience can read, so seven is what
+// fits the column; the header count still reports the true total.
+const VISIBLE_EVENTS = 7
 
 /* A status the backend has not defined yet renders in the muted outline rather
  * than borrowing the run's Chalk cue — an unknown value is a backend change, and
@@ -54,7 +54,8 @@ const VISIBLE_EVENTS = 10
 const STATUS_DETAILS = {
   running: 'bg-chalk',
   done: 'bg-chalk',
-  waiting_consent: 'bg-chalk',
+  // Waiting on a person: a hollow ring, the one row that asks for action.
+  waiting_consent: 'border border-chalk bg-transparent',
   error: 'border border-graphite bg-transparent',
   invalid: 'border border-graphite bg-transparent',
 }
@@ -74,7 +75,7 @@ const RAIL_CLASS = 'mt-6 grid grid-cols-2 gap-y-4 sm:grid-cols-3 lg:grid-cols-6'
 const RAIL_ITEM_CLASS = 'flex min-w-0 flex-col gap-2'
 const RAIL_TICK_CLASS = 'h-px w-full bg-graphite'
 const RAIL_TICK_ACTIVE_CLASS = 'h-px w-full bg-chalk'
-const RAIL_LABEL_CLASS = `truncate text-[11px] uppercase ${metaClass} ${smokeClass}`
+const RAIL_LABEL_CLASS = `truncate uppercase ${metaClass} ${smokeClass}`
 
 // The log grows to its own content instead of claiming a fixed height. A
 // `h-64` box with the rows bottom-aligned was technically stable, but at event 4
@@ -87,9 +88,11 @@ const LOG_CLASS = 'mt-6 flex flex-col overflow-y-auto border-t border-graphite'
 const LOG_LIST_CLASS = 'mt-3 flex flex-col gap-2.5'
 
 const ROW_CLASS = 'flex items-baseline gap-3'
-const ROW_TIME_CLASS = `shrink-0 text-[11px] tabular-nums ${metaClass} ${smokeClass}`
-const ROW_AGENT_CLASS = `shrink-0 text-[11px] uppercase ${metaClass} text-chalk`
-const ROW_MESSAGE_CLASS = 'min-w-0 flex-1 truncate text-[11px] leading-body text-smoke'
+// Wraps instead of truncating: the numbers at the end of a message are the point.
+const ROW_TIME_CLASS = `shrink-0 tabular-nums ${metaClass} ${smokeClass}`
+const ROW_AGENT_CLASS = `shrink-0 uppercase ${metaClass} text-chalk`
+const ROW_MESSAGE_CLASS = 'min-w-0 flex-1 text-sm leading-snug'
+const ROW_ACTION_CLASS = `mr-2 font-medium uppercase ${metaClass} text-chalk`
 const ROW_DOT_CLASS = `${INLINE_DOT_CLASS} self-center`
 
 // Nothing has run yet: one muted sentence. No dashed placeholder, no fake rows
@@ -180,7 +183,14 @@ export default function AgentConsole({
                 />
                 <span className={ROW_TIME_CLASS}>{event.timestamp}</span>
                 <span className={ROW_AGENT_CLASS}>{event.agent}</span>
-                <span className={ROW_MESSAGE_CLASS}>{event.message}</span>
+                <span
+                  className={`${ROW_MESSAGE_CLASS} ${event.status === 'done' ? 'text-chalk' : 'text-smoke'}`}
+                >
+                  {event.status === 'waiting_consent' ? (
+                    <span className={ROW_ACTION_CLASS}>Action needed</span>
+                  ) : null}
+                  {event.message}
+                </span>
               </li>
             ))}
           </ol>
